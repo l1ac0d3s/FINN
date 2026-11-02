@@ -84,6 +84,15 @@ h1 { font-family: 'IBM Plex Serif', Georgia, serif; }
 .settings-body { display: grid; gap: 8px; padding: 8px 0 4px; }
 .settings-body label { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; color: var(--text); }
 .notify { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 10px 0; }
+.meaning { font-size: 13px; color: var(--muted); margin: 4px 0 0; }
+.alert-badge { display: inline-block; font-size: 11px; background: var(--gold); color: #ffffff;
+  border-radius: 8px; padding: 2px 8px; margin-top: 6px; }
+.cats-title { font-size: 13px; color: var(--text); margin-top: 4px; }
+.cats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 13px; }
+.cats label { display: flex; gap: 6px; align-items: center; text-transform: capitalize; }
+.lookup { display: flex; gap: 8px; margin: 12px 0 4px; }
+.lookup input { flex: 1; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--surface); color: var(--text); font: inherit; }
 button.action { margin-top: 10px; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--accent);
   background: transparent; color: var(--accent); font: inherit; font-size: 13px; cursor: pointer; }
 button.action:disabled { opacity: 0.6; cursor: default; }
@@ -107,6 +116,11 @@ ul.claims p { margin: 4px 0; }
     <span class="sub" id="generated"></span>
   </header>
   <div class="brief" id="brief" role="status"></div>
+  <form class="lookup" id="lookup-form">
+    <input id="lookup-input" placeholder="Look up a ticker, e.g. INFY" autocomplete="off" aria-label="Ticker">
+    <button class="action" type="submit">Look up</button>
+  </form>
+  <div id="lookup-out"></div>
   <nav class="windows" id="windows" aria-label="Time window"></nav>
   <div class="custom-window">
     <label for="custom-hours">Custom period (hours)</label>
@@ -118,6 +132,8 @@ ul.claims p { margin: 4px 0; }
     <div class="settings-body">
       <label>Volume spike at least <input id="set-volume" type="number" step="0.1" min="1" max="10"> times the 20-day median</label>
       <label>Price move of at least <input id="set-price" type="number" step="0.5" min="1" max="20"> percent in a day</label>
+      <div class="cats-title">Announcement types that raise an alert</div>
+      <div class="cats" id="cat-boxes"></div>
       <button id="save-settings" class="action" type="button">Save</button>
       <div id="settings-msg" class="note"></div>
     </div>
@@ -206,7 +222,9 @@ function itemCard(a) {
     <div class="meta"><span class="ticker">${esc(a.ticker)}</span>
       <span class="cat">${esc(a.category.replace(/_/g, " "))}</span>
       <span>${esc(fmtTime(a.published_at))}</span></div>
-    <p>${esc(a.subject)}</p>${reactionLine(a)}${filing}${results}
+    <p>${esc(a.subject)}</p>
+    <p class="meaning">${esc(a.summary || "")}</p>
+    ${a.alert ? '<span class="alert-badge">Alert</span>' : ""}${reactionLine(a)}${filing}${results}
   </article>`;
 }
 
@@ -344,6 +362,21 @@ $("#windows").addEventListener("click", (event) => {
   load();
 });
 
+// Look up any ticker that has data on the server
+$("#lookup-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const ticker = $("#lookup-input").value.trim().toUpperCase();
+  const out = $("#lookup-out");
+  if (!ticker) return;
+  out.innerHTML = '<p class="note">Looking up ' + esc(ticker) + "…</p>";
+  try {
+    const card = await getJSON(`/api/company/${encodeURIComponent(ticker)}/results`);
+    out.innerHTML = `<div class="card"><div class="meta"><span class="ticker">${esc(ticker)}</span></div>${resultsTable(card)}</div>`;
+  } catch (err) {
+    out.innerHTML = `<p class="note">No figures stored for ${esc(ticker)} yet. Add it to the config and refresh the data.</p>`;
+  }
+});
+
 // Custom time window
 $("#apply-custom").addEventListener("click", () => {
   const hours = Math.round(Number($("#custom-hours").value));
@@ -360,11 +393,15 @@ async function loadSettings() {
   const s = await getJSON("/api/settings");
   $("#set-volume").value = s.volume_multiple;
   $("#set-price").value = s.price_move_pct;
+  $("#cat-boxes").innerHTML = s.all_categories.map((c) => `
+    <label><input type="checkbox" value="${esc(c)}" ${s.alert_categories.includes(c) ? "checked" : ""}>
+    ${esc(c.replace(/_/g, " "))}</label>`).join("");
 }
 $("#save-settings").addEventListener("click", async () => {
   const body = {
     volume_multiple: Number($("#set-volume").value),
     price_move_pct: Number($("#set-price").value),
+    alert_categories: [...document.querySelectorAll("#cat-boxes input:checked")].map((i) => i.value),
   };
   const resp = await fetch("/api/settings", {
     method: "PUT",

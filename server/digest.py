@@ -71,7 +71,28 @@ def collapse_same_filing(rows):
     return merged
 
 
-def build_digest(rows, now, hours, prices=None):
+CATEGORY_MEANING = {
+    "results": "Quarterly or annual results. The headline figures are on the results card.",
+    "M&A": "Acquisition, merger or stake change. Check the size and terms in the filing.",
+    "fund_raise": "Raising money from investors, or a buyback. Check the amount and price.",
+    "management_change": "A director or senior manager joined, left or was re-designated.",
+    "litigation": "Legal, regulatory or insolvency matter. Check the penalty or order.",
+    "insider_trading": "A promoter or insider bought or sold shares. Check quantity and price.",
+    "earnings_call": "Notice, transcript or recording of an earnings call.",
+    "investor_meetings": "A meeting with investors or analysts.",
+    "credit_rating": "A rating agency assigned, changed or reaffirmed a credit rating.",
+    "dividend": "A cash dividend was declared. Check the amount and record date.",
+    "bonus_split": "A bonus issue or stock split. The share count changes, not the value.",
+    "capex": "Spending approved for a new plant or extra capacity.",
+    "press_release": "General news, an order win or a clarification.",
+    "postal_ballot": "Shareholders are voting by postal ballot.",
+    "agm_egm": "A shareholder meeting notice or its outcome.",
+    "pledging": "Promoters pledged, released or changed pledged shares. Heavy pledging is a risk signal.",
+    "unclassified": "Routine paperwork that rarely moves the stock.",
+}
+
+
+def build_digest(rows, now, hours, prices=None, alert_categories=frozenset()):
     """Group announcements in the window by tier.
 
     rows: dicts with published_at, tier, and display fields.
@@ -85,6 +106,10 @@ def build_digest(rows, now, hours, prices=None):
     if prices is not None:
         for r in in_window:
             r["reaction"] = market_reaction(prices.get(r["ticker"], []), r["published_at"])
+    for r in in_window:
+        category = r.get("category") or "unclassified"
+        r["summary"] = CATEGORY_MEANING.get(category, "Filing from the exchange.")
+        r["alert"] = category in alert_categories
     in_window.sort(key=lambda r: r["published_at"], reverse=True)
 
     groups = {"high": [], "medium": [], "low": [], "hidden": []}

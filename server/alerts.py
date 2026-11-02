@@ -8,6 +8,23 @@ ingest uses.
 from ingest.prices import unusual_moves
 
 DEFAULTS = {"volume_multiple": 2.0, "price_move_pct": 5.0}
+
+ALL_CATEGORIES = [
+    "results", "M&A", "fund_raise", "management_change", "litigation", "insider_trading",
+    "earnings_call", "investor_meetings", "credit_rating", "dividend", "bonus_split", "capex",
+    "press_release", "postal_ballot", "agm_egm", "pledging", "unclassified",
+]
+DEFAULT_ALERT_CATEGORIES = ["results", "M&A", "management_change", "litigation", "fund_raise", "pledging"]
+
+
+def alert_categories(settings):
+    """The announcement types that raise an alert. Defaults to the material types."""
+    raw = settings.get("alert_categories")
+    if raw is None:
+        return set(DEFAULT_ALERT_CATEGORIES)
+    return {c for c in raw.split(",") if c in ALL_CATEGORIES}
+
+
 LIMITS = {"volume_multiple": (1.0, 10.0), "price_move_pct": (1.0, 20.0)}
 
 

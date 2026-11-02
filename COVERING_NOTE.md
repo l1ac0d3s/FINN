@@ -2,49 +2,58 @@
 
 **Subject:** ENAM - IIT screening - 2027
 
+## Links
+
+- App (mobile-friendly): https://finn-wq09.onrender.com
+- Repository: https://github.com/l1ac0d3s/FINN
+- AI build history: https://claude.ai/code/session_01A1LVKziQJcCEW5rvXbFFn9
+
 ## What I built
 
-FINN is a mobile-first web app with two modes. **Push** shows what changed in an 18-company portfolio plus 4 ad-hoc tickers: a time-windowed digest, announcements sorted into priority tiers, price and volume alerts with configurable thresholds, and results cards with QoQ and YoY growth. Every filing card shows the market reaction — how the stock moved on the session after the filing, and whether volume was unusual. **Pull** runs a narrative-vs-numbers check on one company: it reads earnings-call transcripts, lists management's quantified revenue claims with a verbatim quote and page, and compares each claim with the reported growth.
+FINN is a mobile-first investor filter with a push view and a pull view.
+
+**Push**
+- A portfolio of 18 companies across sectors and sizes, plus 4 ad-hoc tickers.
+- A digest for 24 hours, 3 days, 7 days, or any number of hours from 1 to 720.
+- Each announcement is classified using the 18 categories in the reference document, and sorted into High, Medium, Routine and Hidden.
+- Every filing has a one-line meaning for its type, and a market line showing how the stock moved after the filing.
+- Filings listed under several subject lines appear as one card.
+- Price and volume alerts, with thresholds you can change in the app.
+- You choose which announcement types raise an alert.
+- Results cards with revenue, EBITDA, PBT and PAT, and QoQ and YoY growth.
+- You can look up any ticker that has data on the server.
+
+**Pull**
+- Narrative vs numbers: management's quantified revenue claims are taken from earnings-call transcripts, and each one must be quoted word for word from the cited page. Claims that fail this check are dropped. Each claim is then compared with reported growth.
 
 ## Key decisions and trade-offs
 
-- **Ingest runs on my own machine; the server only serves data.** Yahoo, NSE and screener.in block cloud-sandbox traffic, but are reachable from a normal network. The trade-off is that the data is as fresh as the last run, not live. The app shows a "Data as of" line so the investor always knows.
-- **Classification by rules first, from the reference document's 18 categories.** A model is called only when no rule matches. This keeps cost near zero. Unmatched subjects go to low priority rather than being hidden.
-- **Verdicts come from the figures, not the model.** The model writes quotes and states the growth it was told about. A claim is kept only if its quote appears word for word on the stated page. Claims that fail are dropped and counted, never shown. This is the "narrative vs numbers" analysis the brief values most.
-- **Free-tier model.** The pull feature calls a free Hugging Face model, so the cost is zero. The trade-off is that free-tier availability and quality vary.
-- **Sentence-aligned chunks.** Text is split at sentence boundaries so a quote is never cut in half, which makes the verbatim check reliable.
-- **Batch sync.** Rows go to the server in batches of 500, so a deployed server doesn't receive one very large request.
-- **Alert thresholds are configurable in the app.** Volume spike multiple (1–10×) and price move percentage (1–20%) can be edited directly in the UI and saved on the server.
-- **Time windows follow the newest data.** A snapshot stays useful instead of going blank when the data isn't live.
+- The data is gathered on a computer and sent to the hosted app. Financial sites block the cloud host, so this was the reliable route.
+- A nightly job on GitHub Actions refreshes the data each weekday at 18:30 IST, so no computer needs to stay on. Its first run is a test, and I haven't confirmed it yet.
+- Results and market figures come from data, not from a language model.
+- EBITDA is screener.in's "Operating Profit", which is an approximation.
+- Every filing's one-line meaning describes its category, not its content. Reading the actual document would need downloads I haven't built.
+- The page shows "Data as of" with the newest filing date, and the time windows are measured from that date.
 
-## What I deliberately left out
+## What is not finished
 
-- The management-change bio (the brief's example). It needs a source for the person's background, and I didn't want to scrape a professional network.
-- The BSE fallback. NSE alone covers the demo tickers.
-- Pull outputs other than narrative-vs-numbers. Guidance, cash quality, balance sheet, business snapshot, trajectory and bull-vs-bear are not built. The narrative-vs-numbers is the worked example the brief asks for.
-- Real-time push notifications when the app is closed. Notifications work while the app is open.
-- Annual reports in the pull feature. The download logic exists but is switched off to keep the seed small.
-
-## Status, stated plainly
-
-- Prices, announcements, quarterly figures and document links ran live for all 22 tickers.
-- Transcript text extraction is present.
-- The claims check code is complete and tested. The deployed link shows the digest, alerts, results cards and market reactions. The claims-check button appears on results cards but requires model access to produce output.
-- Each filing card shows how the stock moved on the session after the filing, and whether volume was unusual.
+- **The claims check has not produced output from a real model.** It needs a language model. The free hosted models I tried had no credits or refused access, and a local model on my laptop was too slow to finish. The code is complete and tested with a stand-in model.
+- **Only one pull output is built.** Guidance, cash quality, balance sheet, business snapshot, trajectory and bull vs bear are not built.
+- **Management-change bio.** I found no reliable source for a person's background, so it is not built.
+- **Results figures come from screener.in,** not from the results filing the brief names.
+- **Alerts are not sent to the phone when the app is closed.** The app shows notifications while it is open, and it can be added to a phone's home screen.
+- **BSE is not used.** NSE covers every demo company.
 
 ## Where I'd take it next
 
-1. Run the claims check on all 22 companies and tune the prompt against the verdicts.
-2. Add the other pull outputs, starting with guidance and cash quality.
-3. Move ingest to a scheduled job so the data refreshes without a laptop.
-4. Add push notifications for the High tier (background sync via web push).
-5. Add the management-change bio enrichment with a reliable professional-data source.
+1. Get the claims check running on a hosted model, and run it across all 22 companies.
+2. Build the other pull outputs, starting with guidance and cash quality from screener.in's tables.
+3. Read the results figures from the filing itself.
+4. Add a source for management-change backgrounds, for example the disclosure in the appointment filing.
+5. Send push notifications when the app is closed.
 
-## Build history
+Thank you for the opportunity. I'm happy to walk through any part of it.
 
-The Claude Code session used to build this: https://claude.ai/code/session_01A1LVKziQJcCEW5rvXbFFn9
-
-## Links
-
-- App: https://finn-wq09.onrender.com
-- Repository: https://github.com/l1ac0d3s/FINN
+Regards,
+[YOUR NAME]
+[YOUR PHONE]

@@ -16,7 +16,7 @@ from fastapi import Body, FastAPI, Header, HTTPException, Query
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from server.alerts import DEFAULTS, compute_alerts, thresholds, valid_thresholds
+from server.alerts import ALL_CATEGORIES, DEFAULTS, alert_categories, compute_alerts, thresholds, valid_thresholds
 from server.digest import build_digest
 from server.llm import complete
 from server.pull import run_narrative
@@ -86,6 +86,7 @@ def digest(hours: int = Query(24, ge=1, le=24 * 30)):
         WHERE c.in_portfolio = 1
         """
     ).fetchall()
+    alert_cats = alert_categories(load_settings(conn))
     price_rows = conn.execute(
         "SELECT ticker, date, adj_close, volume, vol_baseline FROM prices_eod "
         "WHERE date >= ? ORDER BY ticker, date",
@@ -95,7 +96,7 @@ def digest(hours: int = Query(24, ge=1, le=24 * 30)):
     prices = {}
     for p in price_rows:
         prices.setdefault(p["ticker"], []).append(dict(p))
-    return build_digest([dict(r) for r in rows], datetime.now(timezone.utc), hours, prices=prices)
+    return build_digest([dict(r) for r in rows], data_now(), hours, prices=prices, alert_categories=alert_cats)
 
 
 @app.get("/api/company/{ticker}/results")
@@ -158,6 +159,18 @@ def pull_narrative(ticker: str):
         conn.close()
 
 
+def data_now():
+    """The time the page is 'as of': the newest filing in the data, or the current time if
+    there is none. The time windows are measured from here, so a snapshot of the data
+    still shows its latest filings instead of going blank."""
+    conn = db()
+    try:
+        latest = conn.execute("SELECT MAX(published_at) AS m FROM announcements").fetchone()["m"]
+    finally:
+        conn.close()
+    return datetime.fromisoformat(latest) if latest else datetime.now(timezone.utc)
+
+
 def load_settings(conn):
     return {r["key"]: r["value"] for r in conn.execute("SELECT key, value FROM settings").fetchall()}
 
@@ -166,7 +179,10 @@ def load_settings(conn):
 def get_settings():
     conn = db()
     try:
-        return thresholds(load_settings(conn))
+        settings = load_settings(conn)
+        return {**thresholds(settings),
+                "alert_categories": sorted(alert_categories(settings)),
+                "all_categories": ALL_CATEGORIES}
     finally:
         conn.close()
 
@@ -179,14 +195,20 @@ def put_settings(body: dict = Body(...)):
         raise HTTPException(status_code=400, detail="volume_multiple and price_move_pct must be numbers")
     if not valid_thresholds(values):
         raise HTTPException(status_code=400, detail="volume must be 1 to 10 times; price move must be 1 to 20 percent")
+    cats = body.get("alert_categories")
+    if cats is not None and (not isinstance(cats, list) or any(c not in ALL_CATEGORIES for c in cats)):
+        raise HTTPException(status_code=400, detail="alert_categories must be a list of known categories")
     conn = db()
     try:
         with conn:
             for key, value in values.items():
                 conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, str(value)))
+            if cats is not None:
+                conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                             ("alert_categories", ",".join(sorted(set(cats)))))
     finally:
         conn.close()
-    return values
+    return {**values, "alert_categories": sorted(set(cats)) if cats is not None else None}
 
 
 @app.get("/api/alerts")
@@ -195,7 +217,7 @@ def alerts(hours: int = Query(24, ge=1, le=24 * 30)):
 
     Prices are read from a little before the window, so the first day's move can be measured.
     """
-    today = datetime.now(timezone.utc).date()
+    today = data_now().date()
     since = (today - timedelta(days=max(1, hours // 24))).isoformat()
     conn = db()
     try:
