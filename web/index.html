@@ -9,25 +9,20 @@
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <style>
 :root {
-  --bg: #0e1116; --surface: #171c24; --line: #262d39;
-  --text: #e8ecf2; --muted: #8b95a7;
-  --high: #ff7a6b; --medium: #f5b841; --low: #5b6578;
-  --up: #3ddc97; --down: #ff7a6b; --accent: #7aa7ff;
+  --bg: #f6f8fc;          /* soft white with a blue tint */
+  --surface: #ffffff;
+  --line: #dde4f0;
+  --text: #0f1f3d;        /* navy */
+  --muted: #5b6b85;
+  --accent: #1f4fa3;      /* royal blue */
+  --gold: #c8962e;
+  --high: #c8962e;        /* needs attention: gold */
+  --medium: #1f4fa3;      /* worth a look: blue */
+  --low: #9aa6ba;
+  --up: #1f4fa3;          /* market up: blue */
+  --down: #b3261e;        /* market down: deep red */
 }
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme="dark"]) {
-    --bg: #f5f6f8; --surface: #ffffff; --line: #dfe3ea;
-    --text: #151a22; --muted: #5e6878;
-    --high: #d6453a; --medium: #b7800c; --low: #8a93a3;
-    --up: #13804d; --down: #c23b30; --accent: #2a5bd7;
-  }
-}
-:root[data-theme="dark"] {
-  --bg: #0e1116; --surface: #171c24; --line: #262d39;
-  --text: #e8ecf2; --muted: #8b95a7;
-  --high: #ff7a6b; --medium: #f5b841; --low: #5b6578;
-  --up: #3ddc97; --down: #ff7a6b; --accent: #7aa7ff;
-}
+body { background: var(--bg); }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--text);
   font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
@@ -65,8 +60,8 @@ table.results th:first-child, table.results td:first-child { text-align: left; }
 .alert { color: var(--medium); }
 #status { color: var(--muted); font-size: 13px; min-height: 1em; }
 .masthead { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px;
-  border-bottom: 2px solid var(--accent); padding-bottom: 10px; }
-.masthead h1 { margin: 0; font-size: 26px; }
+  border-bottom: 3px solid var(--gold); padding-bottom: 10px; }
+.masthead h1 { margin: 0; font-size: 26px; color: var(--accent); }
 .tagline { color: var(--muted); font-size: 12px; letter-spacing: 0.04em; margin-top: 2px; }
 .brief { margin: 14px 0 6px; padding: 10px 12px; border-radius: 10px; background: var(--surface);
   border: 1px solid var(--line); font-size: 13px; color: var(--text); }
@@ -293,7 +288,7 @@ function renderBrief(digest, alertCount) {
 
 async function loadDigest() {
   const digest = await getJSON(`/api/digest?hours=${state.hours}`);
-  $("#generated").textContent = `Updated ${fmtTime(digest.generated_at)}`;
+  $("#generated").textContent = `Data as of ${fmtTime(digest.generated_at)}`;
   window.lastDigest = digest;
   notifyNew(digest);
   section("#high", digest.high, "Nothing material in this window.");
