@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: finn
+    runtime: python
+    pythonVersion: "3.13.0"
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn server.app:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: FINN_SYNC_TOKEN
+        sync: false          # set in the Render dashboard, not in this file
+      - key: HF_TOKEN
+        sync: false          # set in the Render dashboard, not in this file
+      - key: FINN_SERVER_DB
+        value: data/server.db

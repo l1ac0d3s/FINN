@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.env
+data/
+web/node_modules/
+web/dist/
+.venv/
+finn-complete/
+check_db.py

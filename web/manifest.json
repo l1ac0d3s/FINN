@@ -1,0 +1,12 @@
+{
+  "name": "FINN",
+  "short_name": "FINN",
+  "description": "Investor daily filter: filings, alerts and results for the portfolio.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f5f6f8",
+  "theme_color": "#0e1116",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

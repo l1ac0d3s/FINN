@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="FINN: the filtered daily view of your portfolio's filings, alerts and results.">
+<title>FINN</title>
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<style>
+:root {
+  --bg: #0e1116; --surface: #171c24; --line: #262d39;
+  --text: #e8ecf2; --muted: #8b95a7;
+  --high: #ff7a6b; --medium: #f5b841; --low: #5b6578;
+  --up: #3ddc97; --down: #ff7a6b; --accent: #7aa7ff;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #f5f6f8; --surface: #ffffff; --line: #dfe3ea;
+    --text: #151a22; --muted: #5e6878;
+    --high: #d6453a; --medium: #b7800c; --low: #8a93a3;
+    --up: #13804d; --down: #c23b30; --accent: #2a5bd7;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1116; --surface: #171c24; --line: #262d39;
+  --text: #e8ecf2; --muted: #8b95a7;
+  --high: #ff7a6b; --medium: #f5b841; --low: #5b6578;
+  --up: #3ddc97; --down: #ff7a6b; --accent: #7aa7ff;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 560px; margin: 0 auto; padding: 16px; }
+header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+h1 { font-size: 22px; margin: 4px 0; letter-spacing: 0.04em; }
+h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 24px 0 8px; }
+.sub { color: var(--muted); font-size: 13px; }
+.windows { display: flex; gap: 6px; margin: 12px 0 4px; }
+.windows button { flex: 1; padding: 8px 0; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--surface); color: var(--muted); font: inherit; cursor: pointer; }
+.windows button.on { color: var(--text); border-color: var(--accent); }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+  padding: 14px; margin-bottom: 10px; border-left: 3px solid var(--low); }
+.card.tier-high { border-left-color: var(--high); }
+.card.tier-medium { border-left-color: var(--medium); }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 12px; color: var(--muted); }
+.ticker { color: var(--text); font-weight: 600; font-size: 14px; }
+.cat { text-transform: capitalize; }
+.card p { margin: 6px 0; }
+.card a { color: var(--accent); font-size: 13px; }
+.row { padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.row:last-child { border-bottom: 0; }
+details summary { cursor: pointer; color: var(--muted); padding: 8px 0; }
+table.results { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
+table.results caption { text-align: left; color: var(--muted); font-size: 12px; padding-bottom: 4px; }
+table.results th, table.results td { text-align: right; padding: 5px 4px; border-top: 1px solid var(--line); }
+table.results th:first-child, table.results td:first-child { text-align: left; }
+.up { color: var(--up); } .down { color: var(--down); }
+.reaction { font-size: 14px; font-weight: 600; margin-top: 6px; }
+.reaction .note { font-weight: 400; }
+.reaction.up { color: var(--up); } .reaction.down { color: var(--down); }
+.note { font-size: 11px; color: var(--muted); margin-top: 6px; }
+.empty { color: var(--muted); padding: 20px 0; text-align: center; }
+.alert { color: var(--medium); }
+#status { color: var(--muted); font-size: 13px; min-height: 1em; }
+.masthead { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px;
+  border-bottom: 2px solid var(--accent); padding-bottom: 10px; }
+.masthead h1 { margin: 0; font-size: 26px; }
+.tagline { color: var(--muted); font-size: 12px; letter-spacing: 0.04em; margin-top: 2px; }
+.brief { margin: 14px 0 6px; padding: 10px 12px; border-radius: 10px; background: var(--surface);
+  border: 1px solid var(--line); font-size: 13px; color: var(--text); }
+.brief strong { color: var(--accent); }
+.footer { margin: 32px 0 16px; padding-top: 12px; border-top: 1px solid var(--line);
+  font-size: 11px; color: var(--muted); line-height: 1.5; }
+.custom-window { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 10px 0 4px;
+  font-size: 13px; color: var(--muted); }
+.custom-window input, .settings input { width: 84px; padding: 6px 8px; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--surface); color: var(--text); font: inherit; }
+.settings { margin: 14px 0 4px; font-size: 13px; }
+.settings summary { cursor: pointer; color: var(--muted); padding: 6px 0; }
+.settings-body { display: grid; gap: 8px; padding: 8px 0 4px; }
+.settings-body label { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; color: var(--text); }
+.notify { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 10px 0; }
+button.action { margin-top: 10px; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--accent);
+  background: transparent; color: var(--accent); font: inherit; font-size: 13px; cursor: pointer; }
+button.action:disabled { opacity: 0.6; cursor: default; }
+ul.claims { list-style: none; padding: 0; margin: 8px 0 0; }
+ul.claims li { border-top: 1px solid var(--line); padding: 8px 0; }
+ul.claims p { margin: 4px 0; }
+.verdict { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
+.verdict.met { color: var(--up); }
+.verdict.missed { color: var(--down); }
+.verdict.pending, .verdict.not-checked, .verdict.not-available { color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <header class="masthead">
+    <div>
+      <h1>FINN</h1>
+      <div class="tagline">Investor daily filter · portfolio and ad-hoc coverage</div>
+    </div>
+    <span class="sub" id="generated"></span>
+  </header>
+  <div class="brief" id="brief" role="status"></div>
+  <nav class="windows" id="windows" aria-label="Time window"></nav>
+  <div class="custom-window">
+    <label for="custom-hours">Custom period (hours)</label>
+    <input id="custom-hours" type="number" min="1" max="720" placeholder="e.g. 48">
+    <button id="apply-custom" class="action" type="button">Apply</button>
+  </div>
+  <details class="settings">
+    <summary>Alert settings</summary>
+    <div class="settings-body">
+      <label>Volume spike at least <input id="set-volume" type="number" step="0.1" min="1" max="10"> times the 20-day median</label>
+      <label>Price move of at least <input id="set-price" type="number" step="0.5" min="1" max="20"> percent in a day</label>
+      <button id="save-settings" class="action" type="button">Save</button>
+      <div id="settings-msg" class="note"></div>
+    </div>
+  </details>
+  <div class="notify">
+    <button id="enable-notifications" class="action" type="button">Turn on notifications</button>
+    <span id="notify-msg" class="note"></span>
+  </div>
+  <div id="status" role="status"></div>
+
+  <section aria-labelledby="h-alerts">
+    <h2 id="h-alerts">Alerts</h2>
+    <div id="alerts" class="empty">Loading…</div>
+  </section>
+
+  <section aria-labelledby="h-high">
+    <h2 id="h-high">Needs your attention</h2>
+    <div id="high" class="empty">Loading…</div>
+  </section>
+
+  <section aria-labelledby="h-medium">
+    <h2 id="h-medium">Worth a look</h2>
+    <div id="medium" class="empty">Loading…</div>
+  </section>
+
+  <section aria-labelledby="h-routine">
+    <h2 id="h-routine">Routine</h2>
+    <div id="routine"></div>
+  </section>
+
+  <footer class="footer">
+    Built for ENAM Holdings' investment workflow. Every filing links to its primary source.
+    Prices are end-of-day, and alerts use the thresholds set for the portfolio.
+  </footer>
+</main>
+
+<script>
+const WINDOWS = [[24, "24h"], [72, "3 days"], [168, "7 days"]];
+const state = { hours: 24 };
+const $ = (sel) => document.querySelector(sel);
+
+function esc(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+function fmtTime(iso) {
+  return new Date(iso).toLocaleString([], { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+}
+function fmtNum(value) {
+  return value == null ? "—" : Number(value).toLocaleString("en-IN", { maximumFractionDigits: 0 });
+}
+function fmtPct(value) {
+  return value == null ? "—" : `${value > 0 ? "+" : ""}${value.toFixed(1)}%`;
+}
+function signClass(value) {
+  return value == null ? "" : value >= 0 ? "up" : "down";
+}
+async function getJSON(url) {
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error(`${url} returned ${resp.status}`);
+  return resp.json();
+}
+
+function renderWindows() {
+  $("#windows").innerHTML = WINDOWS.map(([hours, label]) =>
+    `<button data-hours="${hours}" class="${hours === state.hours ? "on" : ""}" aria-pressed="${hours === state.hours}">${label}</button>`
+  ).join("");
+}
+
+function reactionLine(a) {
+  const x = a.reaction;
+  if (!x) return "";
+  const move = `${x.move_pct > 0 ? "+" : ""}${x.move_pct.toFixed(1)}%`;
+  const volume = x.volume_x != null ? ` · volume ${x.volume_x.toFixed(1)}×` : "";
+  const when = x.after_close ? "filed after close" : "filed during the session";
+  return `<div class="reaction ${x.move_pct >= 0 ? "up" : "down"}">Market ${esc(move)}${esc(volume)}
+    <span class="note">${esc(when)} · ${esc(x.session)}</span></div>`;
+}
+
+function itemCard(a) {
+  const filing = a.attachment_url && a.attachment_url.startsWith("http")
+    ? `<a href="${esc(a.attachment_url)}" target="_blank" rel="noopener">Open filing</a>` : "";
+  const results = a.category === "results" && a.tier === "high"
+    ? `<div class="slot" data-results="${esc(a.ticker)}"></div>` : "";
+  return `<article class="card tier-${esc(a.tier)}">
+    <div class="meta"><span class="ticker">${esc(a.ticker)}</span>
+      <span class="cat">${esc(a.category.replace(/_/g, " "))}</span>
+      <span>${esc(fmtTime(a.published_at))}</span></div>
+    <p>${esc(a.subject)}</p>${reactionLine(a)}${filing}${results}
+  </article>`;
+}
+
+function resultsTable(card) {
+  const rows = ["revenue", "ebitda", "pbt", "pat"].map((metric) => {
+    const m = card.metrics[metric];
+    return `<tr><th scope="row">${metric.toUpperCase()}</th>
+      <td>${fmtNum(m.value)}</td>
+      <td class="${signClass(m.qoq_pct)}">${fmtPct(m.qoq_pct)}</td>
+      <td class="${signClass(m.yoy_pct)}">${fmtPct(m.yoy_pct)}</td></tr>`;
+  }).join("");
+  const yoyNote = card.has_yoy ? "" : " YoY unavailable: the year-ago quarter is not in the data.";
+  return `<table class="results">
+    <caption>${esc(card.period)} · Rs crore</caption>
+    <thead><tr><th></th><th>Value</th><th>QoQ</th><th>YoY</th></tr></thead>
+    <tbody>${rows}</tbody></table>
+    <p class="note">EBITDA is screener's Operating Profit, an approximation.${esc(yoyNote)}</p>`;
+}
+
+function claimsHTML(result) {
+  if (!result.claims.length) {
+    return `<p class="note">${esc(result.note || "No quantified revenue claims in the stored transcripts.")}</p>`;
+  }
+  const items = result.claims.map((c) => `<li>
+    <span class="verdict ${esc(c.verdict.replace(/ /g, "-"))}">${esc(c.verdict)}</span>
+    <p>“${esc(c.quote)}”</p>
+    <p class="note">${esc(c.doc)} · page ${esc(c.page)} · promised ${esc(fmtPct(c.promised_growth_pct))}
+      for ${esc(c.period || "an unstated period")} · reported YoY ${esc(fmtPct(c.actual_yoy_pct))}</p>
+  </li>`).join("");
+  return `<ul class="claims">${items}</ul>
+    <p class="note">${result.dropped} model statements failed the verbatim quote check and were dropped.</p>`;
+}
+
+async function fillResults() {
+  const slots = document.querySelectorAll(".slot[data-results]");
+  const tickers = [...new Set([...slots].map((s) => s.dataset.results))];
+  await Promise.all(tickers.map(async (ticker) => {
+    try {
+      const card = await getJSON(`/api/company/${encodeURIComponent(ticker)}/results`);
+      document.querySelectorAll(`.slot[data-results="${ticker}"]`).forEach((slot) => {
+        slot.innerHTML = resultsTable(card)
+          + `<button class="action" data-claims="${esc(ticker)}">Check management claims</button>`
+          + `<div class="claims-out"></div>`;
+      });
+    } catch (err) {
+      // No figures for this company yet; the announcement card still stands on its own.
+    }
+  }));
+}
+
+document.addEventListener("click", async (event) => {
+  const button = event.target.closest("button[data-claims]");
+  if (!button) return;
+  const slot = button.closest(".slot");
+  const out = slot.querySelector(".claims-out");
+  button.disabled = true;
+  button.textContent = "Checking transcripts…";
+  try {
+    const resp = await fetch(`/api/pull/${encodeURIComponent(button.dataset.claims)}/narrative`, { method: "POST" });
+    if (!resp.ok) {
+      const body = await resp.json().catch(() => ({}));
+      throw new Error(body.detail || `status ${resp.status}`);
+    }
+    out.innerHTML = claimsHTML(await resp.json());
+    button.remove();
+  } catch (err) {
+    out.innerHTML = `<p class="note">Could not run the check: ${esc(err.message)}</p>`;
+    button.disabled = false;
+    button.textContent = "Check management claims";
+  }
+});
+
+function section(id, items, emptyText) {
+  $(id).innerHTML = items.length
+    ? items.map(itemCard).join("")
+    : `<div class="empty">${esc(emptyText)}</div>`;
+}
+
+function renderBrief(digest, alertCount) {
+  const parts = [];
+  parts.push(`${digest.counts.high} need attention`);
+  parts.push(`${digest.counts.medium} worth a look`);
+  parts.push(`${alertCount} alert${alertCount === 1 ? "" : "s"}`);
+  parts.push(`${digest.counts.low} routine`);
+  $("#brief").innerHTML = `<strong>Today's brief</strong> · ${esc(parts.join(" · "))}`;
+}
+
+async function loadDigest() {
+  const digest = await getJSON(`/api/digest?hours=${state.hours}`);
+  $("#generated").textContent = `Updated ${fmtTime(digest.generated_at)}`;
+  window.lastDigest = digest;
+  notifyNew(digest);
+  section("#high", digest.high, "Nothing material in this window.");
+  section("#medium", digest.medium, "No medium-priority items.");
+  const routine = digest.routine;
+  $("#routine").innerHTML = `<details><summary>Routine (${routine.length}) · ${digest.hidden_count} hidden</summary>
+    ${routine.map((a) => `<div class="row"><span class="ticker">${esc(a.ticker)}</span>
+      · ${esc(a.subject)} <span class="sub">${esc(fmtTime(a.published_at))}</span></div>`).join("")
+    || '<div class="empty">Nothing routine in this window.</div>'}
+  </details>`;
+  await fillResults();
+}
+
+async function loadAlerts() {
+  const data = await getJSON(`/api/alerts?hours=${state.hours}`);
+  if (window.lastDigest) renderBrief(window.lastDigest, data.alerts.length);
+  $("#alerts").innerHTML = data.alerts.length
+    ? data.alerts.map((a) => `<div class="card"><div class="meta">
+        <span class="ticker">${esc(a.ticker)}</span><span class="alert">${esc(a.kind.replace(/_/g, " "))}</span>
+        <span>${esc(a.date)}</span></div><p>${esc(a.detail)}</p></div>`).join("")
+    : '<div class="empty">No threshold alerts.</div>';
+}
+
+// The free hosting plan sleeps when idle, so the first visit can take about a minute.
+// Retry for a while instead of showing an empty page.
+async function load(attempt = 1) {
+  renderWindows();
+  $("#status").textContent = attempt === 1 ? "Loading…" : `The server is waking up (attempt ${attempt})…`;
+  try {
+    await Promise.all([loadDigest(), loadAlerts()]);
+    $("#status").textContent = "";
+  } catch (err) {
+    if (attempt < 8) {
+      setTimeout(() => load(attempt + 1), 8000);
+      return;
+    }
+    $("#status").textContent = "The server is not responding. Refresh the page in a minute.";
+  }
+}
+
+$("#windows").addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-hours]");
+  if (!button) return;
+  state.hours = Number(button.dataset.hours);
+  load();
+});
+
+// Custom time window
+$("#apply-custom").addEventListener("click", () => {
+  const hours = Math.round(Number($("#custom-hours").value));
+  if (!hours || hours < 1 || hours > 720) {
+    $("#status").textContent = "Enter between 1 and 720 hours.";
+    return;
+  }
+  state.hours = hours;
+  load();
+});
+
+// Alert settings: saved on the server, applied immediately
+async function loadSettings() {
+  const s = await getJSON("/api/settings");
+  $("#set-volume").value = s.volume_multiple;
+  $("#set-price").value = s.price_move_pct;
+}
+$("#save-settings").addEventListener("click", async () => {
+  const body = {
+    volume_multiple: Number($("#set-volume").value),
+    price_move_pct: Number($("#set-price").value),
+  };
+  const resp = await fetch("/api/settings", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  $("#settings-msg").textContent = resp.ok
+    ? "Saved. Alerts updated."
+    : "Check the values: volume 1 to 10 times, price move 1 to 20 percent.";
+  if (resp.ok) loadAlerts();
+});
+
+// Notifications for new high-priority filings, while the app is open.
+// The list of seen filings is kept in this browser only.
+function notifyNew(digest) {
+  if (!("Notification" in window) || Notification.permission !== "granted") return;
+  const seen = new Set(JSON.parse(localStorage.getItem("finn-seen") || "[]"));
+  digest.high
+    .filter((a) => !seen.has(a.id))
+    .slice(0, 3)
+    .forEach((a) => new Notification(`${a.ticker}: ${a.subject}`, { body: a.category.replace(/_/g, " ") }));
+  const updated = [...seen, ...digest.high.map((a) => a.id)].slice(-500);
+  localStorage.setItem("finn-seen", JSON.stringify(updated));
+}
+$("#enable-notifications").addEventListener("click", async () => {
+  if (!("Notification" in window)) {
+    $("#notify-msg").textContent = "Notifications are not supported in this browser.";
+    return;
+  }
+  const result = await Notification.requestPermission();
+  $("#notify-msg").textContent = result === "granted"
+    ? "On while FINN is open."
+    : "Notifications are off.";
+});
+
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js");
+loadSettings().catch(() => {});
+load();
+</script>
+</body>
+</html>

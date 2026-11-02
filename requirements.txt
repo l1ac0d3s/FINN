@@ -1,0 +1,10 @@
+# Pin exact versions after the first successful install: pip freeze > requirements.lock
+yfinance
+requests
+beautifulsoup4
+pypdf
+fastapi
+uvicorn
+anthropic
+pytest
+httpx
