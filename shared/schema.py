@@ -83,6 +83,18 @@ CREATE TABLE IF NOT EXISTS chunks (
 );
 CREATE INDEX IF NOT EXISTS idx_chunks_ticker ON chunks (ticker, doc_type);
 
+-- Management-change filings, with the profile read from the filing itself.
+CREATE TABLE IF NOT EXISTS management_bios (
+    id            TEXT PRIMARY KEY,           -- the announcement id
+    ticker        TEXT NOT NULL,
+    name          TEXT,
+    role          TEXT,
+    bio           TEXT,                       -- NULL when the filing has no profile
+    source_url    TEXT,
+    published_at  TEXT NOT NULL,
+    updated_at    TEXT NOT NULL
+);
+
 -- Server only: user settings, such as alert thresholds.
 CREATE TABLE IF NOT EXISTS settings (
     key    TEXT PRIMARY KEY,
@@ -119,9 +131,11 @@ PRIMARY_KEY = {
     "documents": "id",
     "chunks": "id",
     "classify_cache": "subject_hash",
+    "management_bios": "id",
 }
 
-SYNCED = ["companies", "prices_eod", "announcements", "alerts", "financials_q", "documents", "chunks"]
+SYNCED = ["companies", "prices_eod", "announcements", "alerts", "financials_q", "documents", "chunks",
+          "management_bios"]
 
 COLUMNS = {
     "companies": ["ticker", "name", "in_portfolio", "updated_at"],
@@ -131,6 +145,7 @@ COLUMNS = {
     "financials_q": ["id", "ticker", "period", "period_end", "revenue", "ebitda", "pbt", "pat", "source", "updated_at"],
     "documents": ["id", "ticker", "doc_type", "period", "url", "label", "updated_at"],
     "chunks": ["id", "document_id", "ticker", "doc_type", "page", "text", "updated_at"],
+    "management_bios": ["id", "ticker", "name", "role", "bio", "source_url", "published_at", "updated_at"],
 }
 
 

@@ -42,12 +42,49 @@ def complete(system, user, max_tokens=600):
 
 
 def parse_json_list(reply):
-    """The first JSON list in a reply, or [] if there isn't one. Models often wrap JSON in prose."""
+    """The claims in a model reply. Models often wrap JSON in prose, or stop mid-list when
+    they run out of tokens, so any complete object is kept even if the list is cut short."""
     match = re.search(r"\[.*\]", reply, re.S)
-    if not match:
-        return []
-    try:
-        data = json.loads(match.group(0))
-    except json.JSONDecodeError:
-        return []
-    return [item for item in data if isinstance(item, dict)]
+    if match:
+        try:
+            return [item for item in json.loads(match.group(0)) if isinstance(item, dict)]
+        except json.JSONDecodeError:
+            pass
+    objects = []
+    for text in re.findall(r"\{[^{}]*\}", reply):
+        try:
+            objects.append(json.loads(text))
+        except json.JSONDecodeError:
+            continue
+    return objects
+
+
+def parse_tagged_claims(reply):
+    """Claims written as tagged blocks, which smaller models often use instead of JSON:
+    [quote]...[/quote] followed by [page]N, [metric]x, [period]y, [growth_pct]z lines."""
+    claims = []
+    for block in reply.split("[quote]")[1:]:
+        quote = re.split(r"\[/quote\]|\[page\]", block)[0].strip()
+        fields = {}
+        for name, value in re.findall(r"\[(page|metric|period|growth_pct)\]\s*([^\[\n]*)", block):
+            fields.setdefault(name, value.strip())
+        growth = fields.get("growth_pct", "null")
+        try:
+            growth = float(growth)
+        except ValueError:
+            growth = None
+        page = fields.get("page", "")
+        claims.append({
+            "quote": quote,
+            "page": int(page) if page.isdigit() else None,
+            "metric": fields.get("metric") if fields.get("metric") not in (None, "", "null") else None,
+            "period": fields.get("period") if fields.get("period") not in (None, "", "null") else None,
+            "growth_pct": growth,
+        })
+    return claims
+
+
+def parse_claims(reply):
+    """JSON list if the model gave one, otherwise the tagged format."""
+    claims = parse_json_list(reply)
+    return claims if claims else parse_tagged_claims(reply)

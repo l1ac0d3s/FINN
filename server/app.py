@@ -18,9 +18,9 @@ from fastapi.staticfiles import StaticFiles
 
 from server.alerts import ALL_CATEGORIES, DEFAULTS, alert_categories, compute_alerts, thresholds, valid_thresholds
 from server.digest import build_digest
-from server.llm import complete
 from server.pull import run_narrative
 from server.results import build_results_card
+from server.snapshot import financial_snapshot, trajectory
 from shared.schema import SYNCED, connect, upsert
 
 DB_PATH = os.environ.get("FINN_SERVER_DB", "data/server.db")
@@ -96,7 +96,22 @@ def digest(hours: int = Query(24, ge=1, le=24 * 30)):
     prices = {}
     for p in price_rows:
         prices.setdefault(p["ticker"], []).append(dict(p))
-    return build_digest([dict(r) for r in rows], data_now(), hours, prices=prices, alert_categories=alert_cats)
+    result = build_digest([dict(r) for r in rows], data_now(), hours, prices=prices, alert_categories=alert_cats)
+    bios = management_bios()
+    for group in ("high", "medium", "routine"):
+        for item in result[group]:
+            if item["id"] in bios:
+                item["bio"] = bios[item["id"]]
+    return result
+
+
+def management_bios():
+    """Management-change profiles keyed by announcement id."""
+    conn = db()
+    try:
+        return {r["id"]: dict(r) for r in conn.execute("SELECT * FROM management_bios").fetchall()}
+    finally:
+        conn.close()
 
 
 @app.get("/api/company/{ticker}/results")
@@ -137,17 +152,12 @@ def pull_narrative(ticker: str):
             raise HTTPException(status_code=404, detail=f"no transcripts stored for {ticker}")
         quarters = quarter_rows(conn, ticker)
 
-        key = hashlib.sha1("|".join([ticker] + sorted(c["id"] for c in chunks)).encode()).hexdigest()
+        key = hashlib.sha1("|".join(["v2", ticker] + sorted(c["id"] for c in chunks)).encode()).hexdigest()
         cached = conn.execute("SELECT output_json FROM pull_cache WHERE key = ?", (key,)).fetchone()
         if cached:
             return {**json.loads(cached["output_json"]), "cached": True}
 
-        try:
-            result = run_narrative(ticker, chunks, quarters, complete)
-        except RuntimeError as exc:
-            raise HTTPException(status_code=503, detail=str(exc))
-        except Exception as exc:
-            raise HTTPException(status_code=502, detail=f"model call failed: {exc}")
+        result = run_narrative(ticker, chunks, quarters)
 
         conn.execute(
             "INSERT OR REPLACE INTO pull_cache (key, output_json, updated_at) VALUES (?, ?, ?)",
@@ -209,6 +219,18 @@ def put_settings(body: dict = Body(...)):
     finally:
         conn.close()
     return {**values, "alert_categories": sorted(set(cats)) if cats is not None else None}
+
+
+@app.get("/api/company/{ticker}/snapshot")
+def company_snapshot(ticker: str):
+    conn = db()
+    try:
+        quarters = quarter_rows(conn, ticker.upper())
+    finally:
+        conn.close()
+    if not quarters:
+        raise HTTPException(status_code=404, detail=f"no quarterly figures for {ticker}")
+    return {"financial": financial_snapshot(quarters), "trajectory": trajectory(quarters)}
 
 
 @app.get("/api/alerts")

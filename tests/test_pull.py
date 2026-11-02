@@ -108,7 +108,7 @@ def test_no_guidance_text_returns_a_note_without_calling_the_model():
     result = run_narrative("INFY", [{"id": "c", "page": 1, "text": "Nothing relevant.", "label": "x"}],
                            QUARTERS, llm=lambda s, u: called.append(u) or "[]")
     assert called == []
-    assert "no guidance" in result["note"]
+    assert "no forward-looking" in result["note"]
 
 
 @pytest.fixture
@@ -126,7 +126,7 @@ def test_endpoint_404_when_no_transcripts(client):
     assert client.post("/api/pull/INFY/narrative").status_code == 404
 
 
-def test_endpoint_503_when_token_missing(client):
+def test_endpoint_finds_statements_without_any_model_key(client):
     stamp = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat(timespec="seconds")
     client.post("/api/sync", json={
         "documents": [{"id": "d1", "ticker": "INFY", "doc_type": "transcript", "period": "2026",
@@ -135,5 +135,7 @@ def test_endpoint_503_when_token_missing(client):
                     "page": 4, "text": PASSAGE["text"], "updated_at": stamp}],
     }, headers={"Authorization": "Bearer test-token"})
     resp = client.post("/api/pull/INFY/narrative")
-    assert resp.status_code == 503
-    assert "HF_TOKEN" in resp.json()["detail"]
+    assert resp.status_code == 200
+    claims = resp.json()["claims"]
+    assert claims[0]["quote"] == "We expect revenue growth of 12 percent in Q3 FY26."
+    assert claims[0]["page"] == 4

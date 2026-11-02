@@ -204,6 +204,12 @@ def run(do_publish, skip_text=False):
             summary.append(f"{ticker}: {stored} text chunks, {failed} PDFs failed")
         except Exception as exc:
             summary.append(f"{ticker}: text failed ({exc})")
+        try:
+            from ingest.management import store_management_bios
+            read = store_management_bios(conn, ticker, session)
+            summary.append(f"{ticker}: {read} management-change filings read")
+        except Exception as exc:
+            summary.append(f"{ticker}: management filings failed ({exc})")
         conn.commit()
 
     print("\n".join(summary))

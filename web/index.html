@@ -103,6 +103,8 @@ ul.claims p { margin: 4px 0; }
 .verdict.met { color: var(--up); }
 .verdict.missed { color: var(--down); }
 .verdict.pending, .verdict.not-checked, .verdict.not-available { color: var(--muted); }
+.bio { margin-top: 10px; padding: 10px 12px; border-left: 3px solid var(--accent); border-radius: 8px; background: rgba(127, 127, 127, 0.08); }
+.bio p { margin: 4px 0; font-size: 13px; }
 </style>
 </head>
 <body>
@@ -117,7 +119,7 @@ ul.claims p { margin: 4px 0; }
   </header>
   <div class="brief" id="brief" role="status"></div>
   <form class="lookup" id="lookup-form">
-    <input id="lookup-input" placeholder="Look up a ticker, e.g. INFY" autocomplete="off" aria-label="Ticker">
+    <input id="lookup-input" placeholder="Try INFY" autocomplete="off" aria-label="Ticker">
     <button class="action" type="submit">Look up</button>
   </form>
   <div id="lookup-out"></div>
@@ -213,7 +215,18 @@ function reactionLine(a) {
     <span class="note">${esc(when)} · ${esc(x.session)}</span></div>`;
 }
 
+function bioBlock(bio) {
+  const who = bio.name
+    ? `<strong>${esc(bio.name)}</strong>${bio.role ? `, ${esc(bio.role)}` : ""}`
+    : "Person not named in the filing";
+  const text = bio.bio
+    ? `<p>${esc(bio.bio)}</p>`
+    : `<p class="note">The filing has no profile. Open the filing for the appointee's background.</p>`;
+  return `<div class="bio"><p>${who}</p>${text}<p class="note">Source: the exchange filing.</p></div>`;
+}
+
 function itemCard(a) {
+  const bio = a.category === "management_change" ? bioBlock(a.bio || {}) : "";
   const filing = a.attachment_url && a.attachment_url.startsWith("http")
     ? `<a href="${esc(a.attachment_url)}" target="_blank" rel="noopener">Open filing</a>` : "";
   const results = a.category === "results" && a.tier === "high"
@@ -224,7 +237,7 @@ function itemCard(a) {
       <span>${esc(fmtTime(a.published_at))}</span></div>
     <p>${esc(a.subject)}</p>
     <p class="meaning">${esc(a.summary || "")}</p>
-    ${a.alert ? '<span class="alert-badge">Alert</span>' : ""}${reactionLine(a)}${filing}${results}
+    ${a.alert ? '<span class="alert-badge">Alert</span>' : ""}${reactionLine(a)}${bio}${filing}${results}
   </article>`;
 }
 
@@ -241,21 +254,34 @@ function resultsTable(card) {
     <caption>${esc(card.period)} · Rs crore</caption>
     <thead><tr><th></th><th>Value</th><th>QoQ</th><th>YoY</th></tr></thead>
     <tbody>${rows}</tbody></table>
-    <p class="note">EBITDA is screener's Operating Profit, an approximation.${esc(yoyNote)}</p>`;
+    <p class="note">EBITDA is screener.in's Operating Profit. The formula PBT + finance cost + depreciation is not read from the filing yet.${esc(yoyNote)}</p>`;
+}
+
+function quartersTable(rows) {
+  if (!rows || !rows.length) return "";
+  const body = rows.map((r) => `<tr><th scope="row">${esc(r.period)}</th><td>${esc(fmtNum(r.revenue))}</td>
+      <td class="${signClass(r.qoq_pct)}">${esc(fmtPct(r.qoq_pct))}</td>
+      <td class="${signClass(r.yoy_pct)}">${esc(fmtPct(r.yoy_pct))}</td></tr>`).join("");
+  return `<table class="results"><caption>Last four quarters · revenue in Rs crore</caption>
+    <thead><tr><th></th><th>Revenue</th><th>QoQ</th><th>YoY</th></tr></thead><tbody>${body}</tbody></table>`;
 }
 
 function claimsHTML(result) {
+  const table = quartersTable(result.quarters);
+  const note = `<p class="note">Guidance is often stated in constant currency, and this check compares reported rupee revenue, so small gaps are expected. ${esc(result.dropped)} statements failed the word-for-word check and were dropped.</p>`;
   if (!result.claims.length) {
-    return `<p class="note">${esc(result.note || "No quantified revenue claims in the stored transcripts.")}</p>`;
+    const reason = result.note || "No statement in the transcripts passed the source check.";
+    return `${table}<p class="verdict not-checked">Not found in source</p><p class="note">${esc(reason)}</p>${note}`;
   }
+  const count = (verdict) => result.claims.filter((c) => c.verdict === verdict).length;
+  const tally = `<p class="note">Promises: ${count("met")} met · ${count("missed")} missed · ${count("pending")} pending · ${count("not checked")} not checked</p>`;
   const items = result.claims.map((c) => `<li>
     <span class="verdict ${esc(c.verdict.replace(/ /g, "-"))}">${esc(c.verdict)}</span>
     <p>“${esc(c.quote)}”</p>
     <p class="note">${esc(c.doc)} · page ${esc(c.page)} · promised ${esc(fmtPct(c.promised_growth_pct))}
       for ${esc(c.period || "an unstated period")} · reported YoY ${esc(fmtPct(c.actual_yoy_pct))}</p>
   </li>`).join("");
-  return `<ul class="claims">${items}</ul>
-    <p class="note">${result.dropped} model statements failed the verbatim quote check and were dropped.</p>`;
+  return `${table}${tally}<ul class="claims">${items}</ul>${note}`;
 }
 
 async function fillResults() {
@@ -266,7 +292,7 @@ async function fillResults() {
       const card = await getJSON(`/api/company/${encodeURIComponent(ticker)}/results`);
       document.querySelectorAll(`.slot[data-results="${ticker}"]`).forEach((slot) => {
         slot.innerHTML = resultsTable(card)
-          + `<button class="action" data-claims="${esc(ticker)}">Check management claims</button>`
+          + `<button class="action" data-claims="${esc(ticker)}">Check promises against results</button>`
           + `<div class="claims-out"></div>`;
       });
     } catch (err) {
@@ -293,7 +319,7 @@ document.addEventListener("click", async (event) => {
   } catch (err) {
     out.innerHTML = `<p class="note">Could not run the check: ${esc(err.message)}</p>`;
     button.disabled = false;
-    button.textContent = "Check management claims";
+    button.textContent = "Check promises against results";
   }
 });
 
@@ -372,6 +398,12 @@ $("#lookup-form").addEventListener("submit", async (event) => {
   try {
     const card = await getJSON(`/api/company/${encodeURIComponent(ticker)}/results`);
     out.innerHTML = `<div class="card"><div class="meta"><span class="ticker">${esc(ticker)}</span></div>${resultsTable(card)}</div>`;
+    const snap = await getJSON(`/api/company/${encodeURIComponent(ticker)}/snapshot`);
+    const f = snap.financial;
+    out.insertAdjacentHTML("beforeend", `<div class="card"><div class="meta"><span class="ticker">${esc(ticker)} snapshot</span><span>${esc(f.period)}</span></div>
+      <p>Revenue ${esc(fmtNum(f.revenue))} · EBITDA margin ${esc(fmtPct(f.ebitda_margin_pct))} · PAT margin ${esc(fmtPct(f.pat_margin_pct))}</p>
+      <p class="meaning">Trajectory: revenue growth is ${esc(snap.trajectory.direction)}.</p></div>`);
+    out.insertAdjacentHTML("beforeend", `<div class="slot"><button class="action" data-claims="${esc(ticker)}">Check management claims</button><div class="claims-out"></div></div>`);
   } catch (err) {
     out.innerHTML = `<p class="note">No figures stored for ${esc(ticker)} yet. Add it to the config and refresh the data.</p>`;
   }
