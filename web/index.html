@@ -7,9 +7,12 @@
 <title>FINN</title>
 <link rel="manifest" href="/manifest.json">
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@600&display=swap" rel="stylesheet">
 <style>
 :root {
-  --bg: #f6f8fc;          /* soft white with a blue tint */
+  --bg: #0d3b8c;          /* royal blue page */
   --surface: #ffffff;
   --line: #dde4f0;
   --text: #0f1f3d;        /* navy */
@@ -25,8 +28,8 @@
 body { background: var(--bg); }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--text);
-  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
-main { max-width: 560px; margin: 0 auto; padding: 16px; }
+  font: 15px/1.5 'IBM Plex Sans', system-ui, sans-serif; }
+main { max-width: 560px; margin: 16px auto; padding: 16px 18px 24px; background: var(--surface); border-radius: 20px; box-sizing: border-box; min-height: calc(100vh - 32px); }
 header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 h1 { font-size: 22px; margin: 4px 0; letter-spacing: 0.04em; }
 h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 24px 0 8px; }
@@ -61,6 +64,10 @@ table.results th:first-child, table.results td:first-child { text-align: left; }
 #status { color: var(--muted); font-size: 13px; min-height: 1em; }
 .masthead { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px;
   border-bottom: 3px solid var(--gold); padding-bottom: 10px; }
+.masthead { align-items: center; justify-content: flex-start; }
+.masthead #generated { margin-left: auto; }
+.logo { height: 40px; width: auto; }
+h1 { font-family: 'IBM Plex Serif', Georgia, serif; }
 .masthead h1 { margin: 0; font-size: 26px; color: var(--accent); }
 .tagline { color: var(--muted); font-size: 12px; letter-spacing: 0.04em; margin-top: 2px; }
 .brief { margin: 14px 0 6px; padding: 10px 12px; border-radius: 10px; background: var(--surface);
@@ -92,6 +99,7 @@ ul.claims p { margin: 4px 0; }
 <body>
 <main>
   <header class="masthead">
+    <img class="logo" src="/enam-logo.png" alt="ENAM Holdings" onerror="this.remove()">
     <div>
       <h1>FINN</h1>
       <div class="tagline">Investor daily filter · portfolio and ad-hoc coverage</div>
