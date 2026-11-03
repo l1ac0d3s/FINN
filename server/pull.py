@@ -170,6 +170,30 @@ def verdict_for(claim, quarters):
     return round(actual, 1), judge(actual, promised)
 
 
+def fiscal_year_label(period_end):
+    """'2026-06-30' -> 'FY27'. Indian fiscal years run April to March and are named for the year they end in."""
+    year, month = int(period_end[:4]), int(period_end[5:7])
+    return f"FY{(year + (1 if month >= 4 else 0)) % 100:02d}"
+
+
+def guidance_by_year(claims):
+    """{'FY27': ['operating margin 20.0% to 22.0%', ...]} from the revenue and margin statements with a known year."""
+    found = {}
+    for claim in claims:
+        year = FY_PERIOD.match(claim.get("period") or "")
+        if claim["metric"] not in ("revenue", "margin") or not year or claim["promised_growth_pct"] is None:
+            continue
+        low, high = claim["promised_growth_pct"], claim.get("promised_upper_pct")
+        figure = f"{low:.1f}% to {high:.1f}%" if high is not None else f"{low:.1f}%"
+        text = ("revenue growth " if claim["metric"] == "revenue" else "operating margin ") + figure
+        if "constant currency" in claim["quote"].lower():
+            text += " (constant currency)"
+        lines = found.setdefault(f"FY{year.group(1)}", [])
+        if text not in lines:
+            lines.append(text)
+    return found
+
+
 def quarter_table(quarters, count=4):
     """The last `count` quarters with revenue and its QoQ and YoY growth."""
     rows = []
@@ -182,6 +206,9 @@ def quarter_table(quarters, count=4):
             "revenue": quarter.get("revenue"),
             "qoq_pct": growth_pct(quarter.get("revenue"), previous.get("revenue") if previous else None),
             "yoy_pct": growth_pct(quarter.get("revenue"), prior.get("revenue") if prior else None),
+            "margin_pct": (round(quarter["ebitda"] / quarter["revenue"] * 100, 1)
+                           if quarter.get("ebitda") is not None and quarter.get("revenue") else None),
+            "fy": fiscal_year_label(quarter["period_end"]),
         })
     return rows
 
@@ -204,7 +231,7 @@ def run_narrative(ticker, chunks, quarters):
     found = guidance_statements(chunks)
     if not found:
         return {"ticker": ticker, "claims": [], "dropped": 0, "quarters": quarter_table(quarters),
-                "note": "no forward-looking revenue growth statement with a number was found in the stored transcripts"}
+                "guidance_by_year": {}, "note": "no forward-looking revenue growth statement with a number was found in the stored transcripts"}
 
     kept, dropped = ground(found, chunks)
     claims, seen = [], set()
@@ -226,4 +253,5 @@ def run_narrative(ticker, chunks, quarters):
             "verdict": verdict,
         }
         claims.append({**row, "id": claim_id(ticker, row)})
-    return {"ticker": ticker, "claims": claims, "dropped": dropped, "quarters": quarter_table(quarters)}
+    return {"ticker": ticker, "claims": claims, "dropped": dropped, "quarters": quarter_table(quarters),
+            "guidance_by_year": guidance_by_year(claims)}

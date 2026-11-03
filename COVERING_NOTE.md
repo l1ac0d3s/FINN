@@ -26,7 +26,7 @@ FINN is a mobile-first investor filter. Push tells an investor what changed. Pul
 
 **Push: alerts**
 - Price alerts use each stock's own history. A move alerts when it is an outlier against that stock's last 30 sessions (z score of 2 or more by default), and at least 2% in size. A fixed percentage would treat a utility and a volatile small cap alike.
-- Volume alerts fire when volume is at least 2 times the 20-session median.
+- Volume alerts fire when volume is at least 2 times the 20-session median and, where the stock has enough history, also an outlier against its own last 30 sessions. A stock whose volume is routinely noisy does not alert every other day.
 - You set the thresholds in the app, and choose which announcement types raise an alert. Changes apply at once, without a re-run.
 
 **Pull: narrative vs numbers (the worked example)**
@@ -41,6 +41,8 @@ FINN is a mobile-first investor filter. Push tells an investor what changed. Pul
 
 **Pull: other outputs**
 - Financial snapshot and four-quarter trajectory, from the stored quarterly figures.
+- An Ask box under each company. A question is answered only with sentences quoted word for word from the stored transcripts, with their pages. If the transcripts don't cover it, the answer is "Not found in source". No model is used.
+- A four-quarter table with each quarter's revenue growth and reported operating margin, and the guidance in force for the fiscal year beneath it.
 - Balance sheet and cash quality, by year, from screener.in's balance sheet and cash-flow tables: net worth, borrowings, debt to equity, cash from operations, and cash from operations as a share of net profit. Built and tested on a sample page; the first live check against a real screener page is pending.
 - A credit scorecard at `/credit.html`. You enter debt, cash and interest expense from the annual report. It scores interest cover, net debt to EBITDA, PAT margin and EBITDA trend, and gives a rating and an underwriting view. A chart shows how the score moves as EBITDA falls or rises, at three debt levels.
 

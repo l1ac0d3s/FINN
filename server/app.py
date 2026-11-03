@@ -322,6 +322,25 @@ def clear_requests(body: dict = Body(...), authorization: str | None = Header(de
     return {"ok": True, "cleared": len(tickers)}
 
 
+@app.get("/api/company/{ticker}/ask")
+def company_ask(ticker: str, q: str = Query(..., min_length=3, max_length=200)):
+    """Answer a question with quotes from the stored transcripts, or say it was not found."""
+    from server.ask import answer
+    conn = db()
+    try:
+        chunks = [dict(r) for r in conn.execute(
+            "SELECT c.id, c.page, c.text, d.label FROM chunks c "
+            "JOIN documents d ON d.id = c.document_id "
+            "WHERE c.ticker = ? AND c.doc_type = 'transcript' ORDER BY c.document_id, c.page, c.id",
+            (ticker.upper(),),
+        ).fetchall()]
+    finally:
+        conn.close()
+    if not chunks:
+        raise HTTPException(status_code=404, detail=f"no transcripts stored for {ticker}")
+    return {"ticker": ticker.upper(), "question": q, **answer(q, chunks)}
+
+
 @app.get("/api/company/{ticker}/bullbear")
 def company_bull_bear(ticker: str):
     """Bull and bear points from the stored transcripts, each quoted with its page."""

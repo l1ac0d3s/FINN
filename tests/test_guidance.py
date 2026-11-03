@@ -149,3 +149,16 @@ def test_the_same_sentence_on_two_pages_of_one_call_is_one_row():
 
 def test_a_sentence_about_maintaining_margins_is_not_guidance():
     assert statement_from("In FY26 we have been able to maintain the margins at 21% despite investing in business.") is None
+
+
+def test_the_four_quarter_table_carries_margin_and_the_year_each_quarter_belongs_to():
+    quarters = run_narrative("INFY", OCT_CALL, FY27_SO_FAR)["quarters"]
+    assert [q["fy"] for q in quarters] == ["FY26", "FY26", "FY27", "FY27"]
+    assert quarters[0]["margin_pct"] is None                      # no operating profit stored for that quarter
+    assert quarters[2]["margin_pct"] == pytest.approx(21.6, abs=0.1)   # 10,400 / 48,211
+
+
+def test_the_guidance_in_force_is_listed_for_its_fiscal_year():
+    guidance = run_narrative("INFY", OCT_CALL, FY27_SO_FAR)["guidance_by_year"]
+    assert "operating margin 20.0% to 22.0%" in guidance["FY27"]
+    assert "revenue growth 1.0% to 2.0% (constant currency)" in guidance["FY27"]

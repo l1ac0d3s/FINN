@@ -164,3 +164,11 @@ def test_both_pages_and_the_service_worker_are_served(loaded):
     assert "Today's brief" in home.text and "credit.html" in home.text
     assert loaded.get("/credit.html").status_code == 200
     assert "push" in loaded.get("/sw.js").text
+
+
+def test_ask_answers_from_the_transcripts_and_admits_when_it_cannot(loaded):
+    found = loaded.get("/api/company/INFY/ask", params={"q": "What is the operating margin guidance?"}).json()
+    assert found["found"] is True and found["answers"][0]["page"] == 4
+    missing = loaded.get("/api/company/INFY/ask", params={"q": "Who won the cricket world cup final?"}).json()
+    assert missing["found"] is False and "Not found in source" in missing["note"]
+    assert loaded.get("/api/company/NOPE/ask", params={"q": "margin guidance"}).status_code == 404

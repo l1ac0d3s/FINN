@@ -66,3 +66,38 @@ def test_out_of_range_thresholds_are_rejected():
     assert valid_thresholds({"volume_multiple": 2.0, "price_move_pct": 2.0, "z_threshold": 2.0})
     assert not valid_thresholds({"volume_multiple": 0.5, "price_move_pct": 2.0, "z_threshold": 2.0})
     assert not valid_thresholds({"volume_multiple": 2.0, "price_move_pct": 2.0, "z_threshold": 9.0})
+
+
+def volume_series(ticker, volumes, baseline=100.0, start="2026-09-01"):
+    rows = bars(ticker, [0.0] * len(volumes), baseline=baseline, start=start)
+    for row, volume in zip(rows, volumes):
+        row["volume"] = volume
+    return rows
+
+
+def test_a_quiet_stock_alerts_when_its_volume_jumps():
+    rows = volume_series("QUIET", [100.0, 101.0] * 8 + [300.0])
+    alerts = compute_alerts(rows, {}, rows[-1]["date"])
+    spikes = [a for a in alerts if a["kind"] == "volume_spike"]
+    assert len(spikes) == 1
+    assert "standard deviations" in spikes[0]["detail"]
+
+
+def test_a_stock_with_routinely_noisy_volume_does_not_alert_at_the_same_multiple():
+    rows = volume_series("NOISY", [50.0, 250.0] * 8 + [250.0])   # 2.5x the median, but normal for this stock
+    assert [a for a in compute_alerts(rows, {}, rows[-1]["date"]) if a["kind"] == "volume_spike"] == []
+
+
+def test_defaults_can_be_set_from_the_environment(monkeypatch):
+    import importlib
+    from server import alerts
+    monkeypatch.setenv("FINN_Z_THRESHOLD", "3.5")
+    monkeypatch.setenv("FINN_PRICE_MOVE_PCT", "not a number")
+    importlib.reload(alerts)
+    try:
+        assert alerts.DEFAULTS["z_threshold"] == 3.5
+        assert alerts.DEFAULTS["price_move_pct"] == 2.0      # an unusable value is ignored
+    finally:
+        monkeypatch.delenv("FINN_Z_THRESHOLD")
+        monkeypatch.delenv("FINN_PRICE_MOVE_PCT")
+        importlib.reload(alerts)

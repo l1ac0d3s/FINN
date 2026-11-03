@@ -285,13 +285,16 @@ function resultsTable(card) {
     <p class="note">EBITDA = PBT + finance costs + depreciation. Where the filing has no such figures, it is screener.in's operating profit.${esc(yoyNote)}</p>${profitHTML(card.profit_view)}${crossHTML(card.cross_check)}`;
 }
 
-function quartersTable(rows) {
+function quartersTable(rows, guidance) {
   if (!rows || !rows.length) return "";
   const body = rows.map((r) => `<tr><th scope="row">${esc(r.period)}</th><td>${esc(fmtNum(r.revenue))}</td>
       <td class="${signClass(r.qoq_pct)}">${esc(fmtPct(r.qoq_pct))}</td>
-      <td class="${signClass(r.yoy_pct)}">${esc(fmtPct(r.yoy_pct))}</td></tr>`).join("");
+      <td class="${signClass(r.yoy_pct)}">${esc(fmtPct(r.yoy_pct))}</td>
+      <td>${r.margin_pct == null ? "—" : `${esc(r.margin_pct.toFixed(1))}%`}</td></tr>`).join("");
+  const years = [...new Set(rows.map((r) => r.fy))].filter((y) => guidance && guidance[y]);
+  const lines = years.map((y) => `<p class="note"><strong>${esc(y)} guidance:</strong> ${esc(guidance[y].join("; "))}</p>`).join("");
   return `<table class="results"><caption>Last four quarters · revenue in Rs crore</caption>
-    <thead><tr><th></th><th>Revenue</th><th>QoQ</th><th>YoY</th></tr></thead><tbody>${body}</tbody></table>`;
+    <thead><tr><th></th><th>Revenue</th><th>QoQ</th><th>YoY</th><th>Op. margin</th></tr></thead><tbody>${body}</tbody></table>${lines}`;
 }
 
 const VERDICT_HINTS = {
@@ -314,7 +317,7 @@ function promiseLine(c) {
 }
 
 function claimsHTML(result) {
-  const table = quartersTable(result.quarters);
+  const table = quartersTable(result.quarters, result.guidance_by_year);
   const note = `<p class="note">Guidance is often stated in constant currency, and this check compares reported rupee revenue, so small gaps are expected. ${esc(result.dropped)} statements failed the word-for-word check and were dropped.</p>`;
   if (!result.claims.length) {
     const reason = result.note || "No statement in the transcripts passed the source check.";
@@ -367,6 +370,23 @@ document.addEventListener("click", async (event) => {
     out.innerHTML = `<p class="note">Could not run the check: ${esc(err.message)}</p>`;
     button.disabled = false;
     button.textContent = "Check promises against results";
+  }
+});
+
+document.addEventListener("submit", async (event) => {
+  const form = event.target.closest && event.target.closest("form.ask");
+  if (!form) return;
+  event.preventDefault();
+  const out = form.parentElement.querySelector(".ask-out");
+  const question = form.q.value.trim();
+  out.innerHTML = '<p class="note">Looking in the transcripts…</p>';
+  try {
+    const result = await getJSON(`/api/company/${encodeURIComponent(form.dataset.ticker)}/ask?q=${encodeURIComponent(question)}`);
+    out.innerHTML = result.found
+      ? `<ul class="claims">${result.answers.map((a) => `<li>“${esc(a.quote)}”<span class="note"> · ${esc(a.doc)} · page ${esc(a.page)}</span></li>`).join("")}</ul>`
+      : `<p class="verdict not-checked">Not found in source</p><p class="note">${esc(result.note)}</p>`;
+  } catch (err) {
+    out.innerHTML = `<p class="note">Could not answer: ${esc(err.message)}</p>`;
   }
 });
 
@@ -495,6 +515,10 @@ $("#lookup-form").addEventListener("submit", async (event) => {
         <p><strong>Bull</strong></p><ul class="claims">${list(bb.bull)}</ul>
         <p><strong>Bear</strong></p><ul class="claims">${list(bb.bear)}</ul>
         <p class="note">${esc(bb.method)}</p></div>`);
+      out.insertAdjacentHTML("beforeend", `<div class="card"><div class="meta"><span class="ticker">${esc(ticker)} ask</span></div>
+        <form class="ask" data-ticker="${esc(ticker)}"><input name="q" placeholder="e.g. What is the margin guidance?" aria-label="Question" autocomplete="off" required minlength="3">
+        <button class="action" type="submit">Ask</button></form><div class="ask-out"></div>
+        <p class="note">Answers are quoted from the stored transcripts. If they don't say it, the answer is "Not found in source".</p></div>`);
     } catch (err) {
       // No transcripts stored for this company; nothing to show.
     }

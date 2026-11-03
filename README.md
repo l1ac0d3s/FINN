@@ -82,7 +82,7 @@ The repository's Actions settings must allow **Read and write** workflow permiss
 ## Alert settings and the credit page
 
 - **Alerts** are set in the app under *Alert settings*. Price alerts use a z score against each stock's last 30 sessions
-  (default 2), with a smallest move of 2%. Volume alerts use 2 times the 20-session median. The server applies changes at once.
+  (default 2), with a smallest move of 2%. Volume alerts use 2 times the 20-session median and, where there is history, an outlier test against the stock's own last 30 sessions. The server applies changes at once. The defaults can be set with `FINN_VOLUME_MULTIPLE`, `FINN_PRICE_MOVE_PCT` and `FINN_Z_THRESHOLD`, so a restart of the free server returns to the values you chose.
 - **Credit scorecard** (`/credit.html`) takes debt, cash and interest expense, in Rs crore, from the annual report.
   Those three figures are not in the stored data.
 
@@ -105,6 +105,8 @@ The repository's Actions settings must allow **Read and write** workflow permiss
 | Notifications when the app is closed | Built with web push. Needs server keys (see Push setup). Not yet tested on a phone |
 | Management backgrounds by hand | Built: entries with a source link in `ingest/manual/management.json` |
 | Lookup of a ticker with no data | Built: queued on the server; the laptop ingests it on its next daily run |
+| Ask a question about a company | Built: quotes from the stored transcripts with pages, or "Not found in source". No model |
+| Four-quarter table with margin and guidance in force | Built |
 | Bull and bear points | Built as a keyword selection of quoted transcript sentences, with pages. Not a written argument |
 | Guidance (revenue, margin, capex) | Built from transcripts. Revenue is checked against reported figures; margin and capex are listed only |
 
