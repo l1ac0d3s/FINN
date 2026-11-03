@@ -3,14 +3,15 @@
 Pure functions. Input is the quarterly series, oldest first, as stored in financials_q.
 """
 
+from server.risk import pct_change, profit_view
+
 METRICS = ["revenue", "ebitda", "pbt", "pat"]
 
 
 def growth_pct(current, previous):
-    """Percent change, or None when either value is missing or the base is zero."""
-    if current is None or previous is None or previous == 0:
-        return None
-    return (current / previous - 1) * 100
+    """Percent change from previous to current, divided by |previous| so a negative base reads correctly.
+    None when either value is missing or the base is zero."""
+    return pct_change(previous, current)
 
 
 def year_ago(quarters, latest):
@@ -44,4 +45,8 @@ def build_results_card(quarters):
         "source": latest.get("source"),
         "metrics": metrics,
         "has_yoy": ya is not None,
+        "profit_view": profit_view(
+            metrics["ebitda"]["yoy_pct"], metrics["pbt"]["yoy_pct"],
+            pbt=latest.get("pbt"), ebitda=latest.get("ebitda"),
+        ),
     }

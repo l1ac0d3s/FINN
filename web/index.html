@@ -103,6 +103,10 @@ ul.claims p { margin: 4px 0; }
 .verdict.met { color: var(--up); }
 .verdict.missed { color: var(--down); }
 .verdict.pending, .verdict.not-checked, .verdict.not-available { color: var(--muted); }
+.verdict.nearly-met { color: var(--up); }
+.verdict.partly-met { color: #b7791f; }
+.profit { margin-top: 10px; padding: 8px 10px; border-left: 3px solid var(--accent); border-radius: 8px; background: rgba(127, 127, 127, 0.08); }
+.profit p { margin: 4px 0; font-size: 13px; }
 .bio { margin-top: 10px; padding: 10px 12px; border-left: 3px solid var(--accent); border-radius: 8px; background: rgba(127, 127, 127, 0.08); }
 .bio p { margin: 4px 0; font-size: 13px; }
 </style>
@@ -133,7 +137,8 @@ ul.claims p { margin: 4px 0; }
     <summary>Alert settings</summary>
     <div class="settings-body">
       <label>Volume spike at least <input id="set-volume" type="number" step="0.1" min="1" max="10"> times the 20-day median</label>
-      <label>Price move of at least <input id="set-price" type="number" step="0.5" min="1" max="20"> percent in a day</label>
+      <label>Price alert when a day's move is at least <input id="set-z" type="number" step="0.1" min="1" max="4"> standard deviations from that stock's last 30 sessions (z score)</label>
+      <label>Smallest move that can alert, in percent <input id="set-price" type="number" step="0.5" min="0.5" max="20"></label>
       <div class="cats-title">Announcement types that raise an alert</div>
       <div class="cats" id="cat-boxes"></div>
       <button id="save-settings" class="action" type="button">Save</button>
@@ -168,7 +173,8 @@ ul.claims p { margin: 4px 0; }
 
   <footer class="footer">
     Built for ENAM Holdings' investment workflow. Every filing links to its primary source.
-    Prices are end-of-day, and alerts use the thresholds set for the portfolio.
+    Prices are end-of-day. Price alerts compare each move with that stock's own recent history.
+    <a href="/credit.html">Credit scorecard</a>
   </footer>
 </main>
 
@@ -241,6 +247,13 @@ function itemCard(a) {
   </article>`;
 }
 
+function profitHTML(v) {
+  if (!v || v.gap_pts == null) return "";
+  return `<div class="profit"><p><strong>Profit view</strong> · EBITDA ${esc(fmtPct(v.ebitda_yoy_pct))}
+    · PBT ${esc(fmtPct(v.pbt_yoy_pct))} · blended ${esc(fmtPct(v.blended_yoy_pct))}</p>
+    <p class="note">${esc(v.formula)}. ${esc(v.note)}</p></div>`;
+}
+
 function resultsTable(card) {
   const rows = ["revenue", "ebitda", "pbt", "pat"].map((metric) => {
     const m = card.metrics[metric];
@@ -254,7 +267,7 @@ function resultsTable(card) {
     <caption>${esc(card.period)} · Rs crore</caption>
     <thead><tr><th></th><th>Value</th><th>QoQ</th><th>YoY</th></tr></thead>
     <tbody>${rows}</tbody></table>
-    <p class="note">EBITDA is screener.in's Operating Profit. The formula PBT + finance cost + depreciation is not read from the filing yet.${esc(yoyNote)}</p>`;
+    <p class="note">EBITDA is screener.in's Operating Profit. The formula PBT + finance cost + depreciation is not read from the filing yet.${esc(yoyNote)}</p>${profitHTML(card.profit_view)}`;
 }
 
 function quartersTable(rows) {
@@ -274,7 +287,7 @@ function claimsHTML(result) {
     return `${table}<p class="verdict not-checked">Not found in source</p><p class="note">${esc(reason)}</p>${note}`;
   }
   const count = (verdict) => result.claims.filter((c) => c.verdict === verdict).length;
-  const tally = `<p class="note">Promises: ${count("met")} met · ${count("missed")} missed · ${count("pending")} pending · ${count("not checked")} not checked</p>`;
+  const tally = `<p class="note">Promises: ${count("met")} met · ${count("nearly met")} nearly met · ${count("partly met")} partly met · ${count("missed")} missed · ${count("pending")} pending · ${count("not checked")} not checked. Each verdict shows the share of the promise delivered.</p>`;
   const items = result.claims.map((c) => `<li>
     <span class="verdict ${esc(c.verdict.replace(/ /g, "-"))}">${esc(c.verdict)}</span>
     <p>“${esc(c.quote)}”</p>
@@ -425,6 +438,7 @@ async function loadSettings() {
   const s = await getJSON("/api/settings");
   $("#set-volume").value = s.volume_multiple;
   $("#set-price").value = s.price_move_pct;
+  $("#set-z").value = s.z_threshold;
   $("#cat-boxes").innerHTML = s.all_categories.map((c) => `
     <label><input type="checkbox" value="${esc(c)}" ${s.alert_categories.includes(c) ? "checked" : ""}>
     ${esc(c.replace(/_/g, " "))}</label>`).join("");
@@ -433,6 +447,7 @@ $("#save-settings").addEventListener("click", async () => {
   const body = {
     volume_multiple: Number($("#set-volume").value),
     price_move_pct: Number($("#set-price").value),
+    z_threshold: Number($("#set-z").value),
     alert_categories: [...document.querySelectorAll("#cat-boxes input:checked")].map((i) => i.value),
   };
   const resp = await fetch("/api/settings", {
@@ -442,7 +457,7 @@ $("#save-settings").addEventListener("click", async () => {
   });
   $("#settings-msg").textContent = resp.ok
     ? "Saved. Alerts updated."
-    : "Check the values: volume 1 to 10 times, price move 1 to 20 percent.";
+    : "Check the values: volume 1 to 10 times, z score 1 to 4, smallest move 0.5 to 20 percent.";
   if (resp.ok) loadAlerts();
 });
 

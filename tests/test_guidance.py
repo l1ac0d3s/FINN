@@ -40,7 +40,7 @@ def test_sentence_is_quoted_verbatim_with_its_page_and_quarter():
 def test_fiscal_year_verdict_sums_four_quarters_each_way():
     # FY26 = 2025-06..2026-03 = 546; FY25 = 2024-06..2025-03 = 460; growth 18.7%
     assert verdict_for({"metric": "revenue", "growth_pct": 15, "period": "FY26"}, EIGHT_QUARTERS) == (18.7, "met")
-    assert verdict_for({"metric": "revenue", "growth_pct": 20, "period": "FY26"}, EIGHT_QUARTERS) == (18.7, "missed")
+    assert verdict_for({"metric": "revenue", "growth_pct": 20, "period": "FY26"}, EIGHT_QUARTERS) == (18.7, "nearly met")
 
 
 def test_future_fiscal_year_is_pending():

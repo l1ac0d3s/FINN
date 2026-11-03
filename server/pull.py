@@ -15,6 +15,7 @@ import re
 from calendar import monthrange
 
 from server.guidance import SEQUENTIAL, guidance_statements
+from server.risk import achievement_pct, grade
 from server.llm import parse_claims
 from server.results import growth_pct, year_ago
 
@@ -26,7 +27,6 @@ PERIOD = re.compile(r"\bQ([1-4])\s*FY\s?(\d{2})\b", re.I)
 FY_PERIOD = re.compile(r"^\s*FY\s?(\d{2})\s*$", re.I)
 MONTH_PERIOD = re.compile(r"\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(\d{4})\b", re.I)
 MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-MET_TOLERANCE_PCT = 1.0     # reported growth within 1 percentage point of the promise counts as met
 MAX_PASSAGES = 6            # limits the model's input when the optional model path is used
 
 SYSTEM_PROMPT = (
@@ -122,7 +122,8 @@ def ground(claims, passages):
 
 
 def judge(actual, promised):
-    return "met" if actual >= promised - MET_TOLERANCE_PCT else "missed"
+    """Verdict from the share of the promise delivered: met, nearly met, partly met or missed."""
+    return grade(achievement_pct(promised, actual)) or "not checked"
 
 
 def fiscal_year_growth(quarters, fy):

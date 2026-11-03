@@ -20,6 +20,7 @@ from server.alerts import ALL_CATEGORIES, DEFAULTS, alert_categories, compute_al
 from server.digest import build_digest
 from server.pull import run_narrative
 from server.results import build_results_card
+from server.risk import credit_model, sensitivity, ttm_from_quarters
 from server.snapshot import financial_snapshot, trajectory
 from shared.schema import SYNCED, connect, upsert
 
@@ -200,7 +201,7 @@ def get_settings():
 @app.put("/api/settings")
 def put_settings(body: dict = Body(...)):
     try:
-        values = {key: float(body[key]) for key in DEFAULTS}
+        values = {key: float(body.get(key, DEFAULTS[key])) for key in DEFAULTS}
     except (KeyError, TypeError, ValueError):
         raise HTTPException(status_code=400, detail="volume_multiple and price_move_pct must be numbers")
     if not valid_thresholds(values):
@@ -233,6 +234,27 @@ def company_snapshot(ticker: str):
     return {"financial": financial_snapshot(quarters), "trajectory": trajectory(quarters)}
 
 
+@app.get("/api/company/{ticker}/credit")
+def company_credit(ticker: str, debt: float = Query(..., ge=0), interest: float = Query(0.0, ge=0),
+                   cash: float = Query(0.0, ge=0)):
+    """Credit scorecard for one company. Debt, cash and interest are entered by the user, in Rs crore."""
+    conn = db()
+    try:
+        quarters = quarter_rows(conn, ticker.upper())
+    finally:
+        conn.close()
+    ttm = ttm_from_quarters(quarters)
+    if ttm is None:
+        raise HTTPException(status_code=404, detail=f"need at least four quarters of figures for {ticker}")
+    return {
+        "ticker": ticker.upper(),
+        "ttm": ttm,
+        "inputs": {"debt": debt, "cash": cash, "interest": interest},
+        **credit_model(ttm, debt, cash, interest),
+        "sensitivity": sensitivity(ttm, debt, cash, interest),
+    }
+
+
 @app.get("/api/alerts")
 def alerts(hours: int = Query(24, ge=1, le=24 * 30)):
     """Alerts for the window, recalculated with the saved thresholds.
@@ -246,7 +268,7 @@ def alerts(hours: int = Query(24, ge=1, le=24 * 30)):
         rows = conn.execute(
             "SELECT ticker, date, adj_close, volume, vol_baseline FROM prices_eod "
             "WHERE date >= ? ORDER BY ticker, date",
-            ((today - timedelta(days=hours // 24 + 10)).isoformat(),),
+            ((today - timedelta(days=hours // 24 + 60)).isoformat(),),
         ).fetchall()
         settings = load_settings(conn)
     finally:

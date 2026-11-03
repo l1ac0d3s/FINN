@@ -55,7 +55,7 @@ def test_alerts_are_calculated_from_prices_with_saved_thresholds(client):
 
 def test_settings_round_trip_and_reject_bad_values(client):
     s = client.get("/api/settings").json()
-    assert (s["volume_multiple"], s["price_move_pct"]) == (2.0, 5.0)
+    assert (s["volume_multiple"], s["price_move_pct"], s["z_threshold"]) == (2.0, 2.0, 2.0)
     assert "results" in s["alert_categories"] and "dividend" not in s["alert_categories"]
     assert client.put("/api/settings", json={"volume_multiple": 3, "price_move_pct": 7}).status_code == 200
     assert client.get("/api/settings").json()["volume_multiple"] == 3.0

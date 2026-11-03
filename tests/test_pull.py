@@ -70,7 +70,7 @@ def test_met_missed_and_pending_verdicts():
     missed = verdict_for({"metric": "revenue", "growth_pct": 40, "period": "Sep 2025"}, QUARTERS)
     pending = verdict_for({"metric": "revenue", "growth_pct": 10, "period": "Mar 2026 Q4 FY26"}, QUARTERS)
     assert met == (32.0, "met")          # 1320 vs 1000 a year earlier = +32%
-    assert missed == (32.0, "missed")
+    assert missed == (32.0, "partly met")   # 32 delivered of 40 promised = 80%
     assert pending == (None, "pending")  # no figures for that quarter yet
 
 
@@ -98,7 +98,7 @@ def test_run_narrative_end_to_end_with_stand_in_model():
     assert result["dropped"] == 1
     assert len(result["claims"]) == 1
     claim = result["claims"][0]
-    assert claim["verdict"] == "missed"          # Dec 2025 is 1200 vs 1100 = +9.1%, promised 12%
+    assert claim["verdict"] == "partly met"      # Dec 2025 is +9.1% against 12% promised = 76% of target
     assert claim["actual_yoy_pct"] == pytest.approx(9.1)
     assert [q["period"] for q in result["quarters"]] == ["Mar 2025", "Jun 2025", "Sep 2025", "Dec 2025"]
 
