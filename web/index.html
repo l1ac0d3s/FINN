@@ -228,7 +228,10 @@ function bioBlock(bio) {
   const text = bio.bio
     ? `<p>${esc(bio.bio)}</p>`
     : `<p class="note">The filing has no profile. Open the filing for the appointee's background.</p>`;
-  return `<div class="bio"><p>${who}</p>${text}<p class="note">Source: the exchange filing.</p></div>`;
+  const source = bio.origin === "manual"
+    ? `<p class="note">Entered by hand from <a href="${esc(bio.source_url)}" target="_blank" rel="noopener">its source</a>. Not from the filing.</p>`
+    : `<p class="note">Source: the exchange filing.</p>`;
+  return `<div class="bio"><p>${who}</p>${text}${source}</div>`;
 }
 
 function itemCard(a) {
@@ -358,7 +361,30 @@ function renderBrief(digest, alertCount) {
   parts.push(`${digest.counts.medium} worth a look`);
   parts.push(`${alertCount} alert${alertCount === 1 ? "" : "s"}`);
   parts.push(`${digest.counts.low} routine`);
-  $("#brief").innerHTML = `<strong>Today's brief</strong> · ${esc(parts.join(" · "))}`;
+  const top = (digest.high || []).slice(0, 3).map((a) =>
+    `<li>${esc(a.ticker)}: ${esc(a.category.replace(/_/g, " "))}. ${esc(a.subject)}</li>`).join("");
+  const questionFor = (a) => ({
+    results: "Did these figures meet what you expected, and why?",
+    management_change: "Does this change your view of how the company is run?",
+    "M&A": "What does this deal do to the price you'd be willing to pay?",
+    litigation: "Could this cost money or management time?",
+    fund_raise: "Is the price fair to existing shareholders?",
+    pledging: "Is the pledge rising, and what is it for?",
+  })[a.category] || "Does this change your view of the company?";
+  const isDone = (id) => { try { return localStorage.getItem(`review:${id}`) === "1"; } catch (e) { return false; } };
+  const questions = (digest.high || []).slice(0, 3).map((a) =>
+    `<li><label><input type="checkbox" data-review="${esc(a.id)}" ${isDone(a.id) ? "checked" : ""}> ${esc(a.ticker)}: ${esc(questionFor(a))}</label></li>`).join("");
+  $("#brief").innerHTML = `<strong>Today's brief</strong> · ${esc(parts.join(" · "))}`
+    + (top ? `<p class="note">Read first:</p><ul class="claims">${top}</ul>` : "")
+    + (questions ? `<p class="note">Before you act, answer one question for each:</p><ul class="claims">${questions}</ul>` : "");
+  if (!window.reviewListener) {
+    window.reviewListener = true;
+    document.addEventListener("change", (event) => {
+      const box = event.target.closest && event.target.closest("input[data-review]");
+      if (!box) return;
+      try { localStorage.setItem(`review:${box.dataset.review}`, box.checked ? "1" : "0"); } catch (e) { /* private window: the tick is simply not remembered */ }
+    });
+  }
 }
 
 async function loadDigest() {
@@ -512,15 +538,40 @@ function notifyNew(digest) {
   const updated = [...seen, ...digest.high.map((a) => a.id)].slice(-500);
   localStorage.setItem("finn-seen", JSON.stringify(updated));
 }
+function urlBase64ToUint8Array(base64) {
+  const padding = "=".repeat((4 - (base64.length % 4)) % 4);
+  const text = (base64 + padding).replace(/-/g, "+").replace(/_/g, "/");
+  return Uint8Array.from(atob(text), (c) => c.charCodeAt(0));
+}
+
 $("#enable-notifications").addEventListener("click", async () => {
-  if (!("Notification" in window)) {
-    $("#notify-msg").textContent = "Notifications are not supported in this browser.";
+  const msg = $("#notify-msg");
+  if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) {
+    msg.textContent = "Push is not supported in this browser. On an iPhone, add FINN to the Home Screen first.";
     return;
   }
-  const result = await Notification.requestPermission();
-  $("#notify-msg").textContent = result === "granted"
-    ? "On while FINN is open."
-    : "Notifications are off.";
+  const permission = await Notification.requestPermission();
+  if (permission !== "granted") {
+    msg.textContent = "Notifications are off.";
+    return;
+  }
+  try {
+    const { key } = await getJSON("/api/push/key");
+    if (!key) {
+      msg.textContent = "Alerts while the app is closed are not set up on the server yet. Alerts show while the app is open.";
+      return;
+    }
+    const registration = await navigator.serviceWorker.ready;
+    const subscription = await registration.pushManager.subscribe({
+      userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(key),
+    });
+    await fetch("/api/push/subscribe", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(subscription.toJSON()),
+    });
+    msg.textContent = "On. New high-priority filings reach this phone, even when the app is closed.";
+  } catch (err) {
+    msg.textContent = "Could not turn on notifications: " + err.message;
+  }
 });
 
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js");

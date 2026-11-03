@@ -1,0 +1,4 @@
+{
+  "_help": "Add one object per management change to entries. Fields: ticker, date (YYYY-MM-DD of the filing), name, role, profile (factual, from the source), source_url (https), entered_by. See ingest/manual_management.py.",
+  "entries": []
+}

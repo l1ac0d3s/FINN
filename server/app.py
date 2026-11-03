@@ -69,6 +69,11 @@ def sync(payload: dict = Body(...), authorization: str | None = Header(default=N
                 for row in rows:
                     upsert(conn, table, row)
                 counts[table] = len(rows)
+            try:
+                from server.push import notify_new
+                notify_new(conn, payload.get("announcements", []))
+            except Exception:
+                pass   # a push problem must never fail the sync
     except (KeyError, ValueError, sqlite3.Error) as exc:
         return JSONResponse(status_code=400, content={"ok": False, "error": str(exc)})
     finally:
@@ -334,6 +339,26 @@ def company_bull_bear(ticker: str):
     if not chunks:
         raise HTTPException(status_code=404, detail=f"no transcripts stored for {ticker}")
     return {"ticker": ticker.upper(), **bull_and_bear(chunks)}
+
+
+@app.get("/api/push/key")
+def push_key():
+    from server.push import PUBLIC, configured
+    return {"key": PUBLIC if configured() else None}
+
+
+@app.post("/api/push/subscribe")
+def push_subscribe(body: dict = Body(...)):
+    from server.push import configured, save_subscription
+    if not configured():
+        raise HTTPException(status_code=503, detail="push notifications are not set up on the server")
+    conn = db()
+    try:
+        if not save_subscription(conn, body):
+            raise HTTPException(status_code=400, detail="subscription is incomplete")
+    finally:
+        conn.close()
+    return {"ok": True}
 
 
 @app.get("/api/company/{ticker}/annual")

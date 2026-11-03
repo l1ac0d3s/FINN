@@ -20,7 +20,8 @@ FINN is a mobile-first investor filter. Push tells an investor what changed. Pul
 - Every filing is classified into one of the 18 categories in the reference document and placed in High, Medium, Routine or Hidden. Hidden items are counted, never listed.
 - High-tier filings come first. Routine is collapsed. A filing listed under several subject lines appears as one card.
 - Each card has a one-line meaning for its category, and a market line showing how the stock moved after the filing. A filing made after 15:30 IST is measured from the next session.
-- Management-change cards show the person's name, role and profile, read from the appointment filing itself. If the filing has no profile, the card says so and links the filing.
+- A morning brief at the top of Today: the counts, and the three most important high-tier filings in one line each.
+- Management-change cards show the person's name, role and profile, read from the appointment filing itself. If the filing has no profile, the card says so. Where I have entered a background by hand, it is labelled "entered by hand", and it links to the source I used.
 - Results cards show revenue, EBITDA, PBT and PAT, with QoQ and YoY change. They also show a profit view: EBITDA growth against PBT growth, the gap between them, and a blended figure whose weight is stated.
 
 **Push: alerts**
@@ -65,13 +66,13 @@ FINN is a mobile-first investor filter. Push tells an investor what changed. Pul
 
 ## What is not finished
 
-- **Results come from screener.in, not from the results filing.** I checked NSE's announcement feed for RELIANCE. Its results items carry only PDF links, and none is flagged as having an XBRL file. A filing parser for XBRL is in the code, but it is never triggered on this feed. Reading the figures from the results PDFs would need one parser per layout, and I did not finish that. The results card says which source it used, and flags any quarter where filing and screener figures differ by more than 1%, once a filing figure exists.
-- **Management-change background from outside the filing.** The app uses only the appointment filing. I did not add a web search, and I did not scrape LinkedIn, because it prohibits scraping. Where a filing has no profile, the card says that.
+- **Results come mostly from screener.in.** NSE's feed carries no XBRL links, so the XBRL reader is not used. The results PDFs are read for the layouts I have checked. Only the ITC standalone income statement has been tested, against the page text as printed. The RELIANCE segment page was not usable, and one saved PDF was truncated and skipped. Any quarter read from a PDF is marked "from the results filing", and any figure that differs from screener.in by more than 1% is flagged on the card. Other companies keep screener.in's figures.
+- **Management-change background from outside the filing.** The app uses the appointment filing. Where a filing has no profile, backgrounds can be entered by hand, each with a source link, and they are labelled as entered by hand. I did not add a web search, and I did not scrape LinkedIn, because it prohibits scraping.
 - **Bull and bear is a selection, not an argument.** Each side shows up to four sentences from the last four transcripts, chosen by keyword and quoted word for word with its page. It does not weigh the evidence, and it does not use any model. A reader still has to judge the points against the source.
 - **Not built:** business snapshot, free cash flow (needs capex from the cash-flow statement), and working-capital days (needs receivables and inventory). Screener's summary tables do not carry these figures.
 - **Guidance** covers forward-looking statements from transcripts. Revenue growth guidance is checked against reported figures. Margin and capex guidance is listed with its stated figure, but not checked, because the reported figures for them are not compared yet. Annual reports are not read.
 - **Any NSE ticker, on demand.** Looking up a ticker with no data queues it. The laptop ingests queued tickers at the start of its next daily run, and the page shows the queued message until then. A ticker only appears after that run, not at once.
-- **Notifications** appear only while the app is open. Alerts are not pushed to the phone when it is closed.
+- **Notifications when the app is closed** are built with web push: a phone that subscribes receives a notification for each new high-priority filing from the last 24 hours. They are switched on with server keys, and they work on an iPhone only after the app is added to the Home Screen. I have not yet tested delivery to a real phone.
 - **BSE is not used.** NSE covers every demo company.
 - **The NSE classification has been tested on labelled test subjects,** not on every live subject line. Subjects no rule matches are shown as low-tier press releases, so they stay visible under Routine.
 - **One company, PAGEIND, did not return quarterly figures** from screener.in in the last run I checked. Its results card shows no figures. I could not fix this without its screener page.
@@ -88,5 +89,5 @@ FINN is a mobile-first investor filter. Push tells an investor what changed. Pul
 Thank you for the opportunity. I'm happy to walk through any part of it.
 
 Regards,
-Aaliyah Ahmed(230009)
-IIT Kanpur
+[YOUR NAME]
+[YOUR PHONE]

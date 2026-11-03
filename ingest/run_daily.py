@@ -206,7 +206,9 @@ def run(do_publish, skip_text=False):
         try:
             from ingest.filing import store_filing_results
             filed, bad = store_filing_results(conn, ticker, session)
-            summary.append(f"{ticker}: {filed} quarters read from results filings, {bad} filings failed")
+            from ingest.pdf_statement import store_pdf_results
+            from_pdf = store_pdf_results(conn, ticker, session)
+            summary.append(f"{ticker}: {filed} quarters from XBRL, {from_pdf} from results PDFs, {bad} filings failed")
         except Exception as exc:
             summary.append(f"{ticker}: results filings failed ({exc})")
         try:
@@ -218,7 +220,9 @@ def run(do_publish, skip_text=False):
         try:
             from ingest.management import store_management_bios
             read = store_management_bios(conn, ticker, session)
-            summary.append(f"{ticker}: {read} management-change filings read")
+            from ingest.manual_management import store_manual_bios
+            by_hand = store_manual_bios(conn)
+            summary.append(f"{ticker}: {read} management-change filings read, {by_hand} entered by hand")
         except Exception as exc:
             summary.append(f"{ticker}: management filings failed ({exc})")
         try:

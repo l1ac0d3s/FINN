@@ -92,7 +92,7 @@ The repository's Actions settings must allow **Read and write** workflow permiss
 | Announcement classification (18 categories) | Built, tested on labelled subject lines. Unmatched subjects show as low-tier press releases |
 | Market line after each filing | Built |
 | Price alerts (z score) and volume alerts | Built, tested |
-| Results card (QoQ, YoY) and profit view | Built, from screener.in. NSE's feed carries no XBRL links, so the filing parser is not used |
+| Results card (QoQ, YoY) and profit view | Built. Most figures come from screener.in. Results PDFs are read for checked layouts only (ITC standalone so far), and such quarters are labelled "from the results filing" |
 | Balance sheet and cash quality (by year) | Built from screener.in's tables. Tested on a sample page; live page check pending |
 | Management-change profile | Built from the appointment filing, where the filing has a profile |
 | Narrative vs numbers (four quarters) | Built. Deterministic, word-for-word checked, quarter and fiscal-year verdicts |
@@ -100,6 +100,8 @@ The repository's Actions settings must allow **Read and write** workflow permiss
 | Financial snapshot and trajectory | Built, from stored quarterly figures |
 | Credit scorecard | Built. Debt, cash and interest are entered by the user |
 | Lookup of an ingested ticker | Built |
+| Notifications when the app is closed | Built with web push. Needs server keys (see Push setup). Not yet tested on a phone |
+| Management backgrounds by hand | Built: entries with a source link in `ingest/manual/management.json` |
 | Lookup of a ticker with no data | Built: queued on the server; the laptop ingests it on its next daily run |
 | Bull and bear points | Built as a keyword selection of quoted transcript sentences, with pages. Not a written argument |
 | Guidance (revenue, margin, capex) | Built from transcripts. Revenue is checked against reported figures; margin and capex are listed only |
@@ -110,12 +112,10 @@ The repository's Actions settings must allow **Read and write** workflow permiss
 - Free cash flow and working-capital days (need capex, receivables and inventory from the full statements).
 - Business snapshot.
 - Checking margin and capex guidance against reported figures (they are listed, not checked).
-- Push notifications when the app is closed.
 - BSE data. NSE covers every demo company.
 - Management backgrounds beyond the appointment filing. No web search, no LinkedIn scraping.
 - Bull vs bear as a written argument. The built version selects quoted transcript sentences by keyword; it does not weigh them.
 - BSE fallback.
-- Push notifications when the app is closed.
 - On-demand research for a ticker that has not been ingested.
 
 ## Design
@@ -130,3 +130,15 @@ The repository's Actions settings must allow **Read and write** workflow permiss
 - Notifications: press *Turn on notifications*. While the app is open, new high-priority filings trigger one. The seen list is kept in this browser only.
 - On a phone, open the app in the browser and choose *Add to Home Screen*.
 - A free uptime monitor (for example UptimeRobot) pinging `/api/health` every 5 minutes keeps the free plan awake.
+
+## Push setup (notifications when the app is closed)
+
+1. On the laptop, in the project folder: `& .\.venv\Scripts\python.exe -m server.push_keys`. It prints three lines.
+2. On Render, add those three as environment variables. Set `VAPID_SUBJECT` to a real `mailto:` address.
+3. Redeploy. On an iPhone, open the app, choose Share → Add to Home Screen, open it from there, then tap **Turn on notifications** and allow.
+
+Without the keys the button says alerts are not set up, and nothing is sent. Keep the private key out of git.
+
+## Management backgrounds entered by hand
+
+Add an entry to `ingest/manual/management.json` for a management change whose filing has no profile. Each entry needs the ticker, the filing date, the name, the role, a short factual profile, and an https source link. The card then says "entered by hand", with the link.

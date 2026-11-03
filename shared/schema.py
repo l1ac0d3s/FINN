@@ -92,6 +92,7 @@ CREATE TABLE IF NOT EXISTS management_bios (
     role          TEXT,
     bio           TEXT,                       -- NULL when the filing has no profile
     source_url    TEXT,
+    origin        TEXT NOT NULL DEFAULT 'filing',   -- 'filing' or 'manual' (entered by hand, with a source)
     published_at  TEXT NOT NULL,
     updated_at    TEXT NOT NULL
 );
@@ -115,6 +116,17 @@ CREATE TABLE IF NOT EXISTS claim_notes (
     ticker      TEXT NOT NULL,
     text        TEXT NOT NULL,
     updated_at  TEXT NOT NULL
+);
+
+-- Server only: phones that asked for notifications, and the filings already sent.
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+    endpoint          TEXT PRIMARY KEY,
+    subscription_json TEXT NOT NULL,
+    created_at        TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS push_sent (
+    id       TEXT PRIMARY KEY,
+    sent_at  TEXT NOT NULL
 );
 
 -- Server only: tickers looked up in the app that have no data yet. The laptop collects and clears them.
@@ -175,7 +187,7 @@ COLUMNS = {
     "financials_q": ["id", "ticker", "period", "period_end", "revenue", "ebitda", "pbt", "pat", "source", "updated_at"],
     "documents": ["id", "ticker", "doc_type", "period", "url", "label", "updated_at"],
     "chunks": ["id", "document_id", "ticker", "doc_type", "page", "text", "updated_at"],
-    "management_bios": ["id", "ticker", "name", "role", "bio", "source_url", "published_at", "updated_at"],
+    "management_bios": ["id", "ticker", "name", "role", "bio", "source_url", "origin", "published_at", "updated_at"],
     "claim_notes": ["id", "ticker", "text", "updated_at"],
     "annual_figures": ["id", "ticker", "year", "net_worth", "borrowings", "total_assets", "cfo", "pat", "updated_at"],
 }
@@ -197,6 +209,10 @@ def _migrate(conn):
     columns = {row["name"] for row in conn.execute("PRAGMA table_info(announcements)").fetchall()}
     if "xbrl_url" not in columns:
         conn.execute("ALTER TABLE announcements ADD COLUMN xbrl_url TEXT")
+        conn.commit()
+    bios = {row["name"] for row in conn.execute("PRAGMA table_info(management_bios)").fetchall()}
+    if "origin" not in bios:
+        conn.execute("ALTER TABLE management_bios ADD COLUMN origin TEXT NOT NULL DEFAULT 'filing'")
         conn.commit()
 
 
