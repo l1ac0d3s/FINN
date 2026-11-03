@@ -46,13 +46,22 @@ def save_subscription(conn, subscription):
     return True
 
 
+def _raw_private_key(pem):
+    """The 32-byte private key as URL-safe base64. This is the form pywebpush reads from a string;
+    handing it PEM text fails with 'Could not deserialize key data'."""
+    from cryptography.hazmat.primitives import serialization
+    key = serialization.load_pem_private_key(pem.encode(), password=None)
+    raw = key.private_numbers().private_value.to_bytes(32, "big")
+    return base64.urlsafe_b64encode(raw).decode().rstrip("=")
+
+
 LAST_ERROR = {"text": None}   # the most recent failure from the push service, for diagnosis
 
 
 def _default_sender(subscription, payload, pem, subject):
     from pywebpush import WebPushException, webpush
     try:
-        webpush(subscription_info=subscription, data=payload, vapid_private_key=pem,
+        webpush(subscription_info=subscription, data=payload, vapid_private_key=_raw_private_key(pem),
                 vapid_claims={"sub": subject})
         LAST_ERROR["text"] = None
         return "sent"
