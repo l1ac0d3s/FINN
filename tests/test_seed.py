@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+﻿from datetime import datetime, timedelta, timezone
 
 from ingest.make_seed import build
 from server.app import ensure_seeded
@@ -30,7 +30,7 @@ def make_source(path):
     conn.close()
 
 
-def test_seed_keeps_recent_rows_and_leaves_out_transcript_text(tmp_path):
+def test_seed_keeps_recent_rows_and_carries_the_transcripts(tmp_path):
     source, target = tmp_path / "ingest.db", tmp_path / "seed.sqlite"
     make_source(source)
     counts = build(source, target, now=NOW)
@@ -38,7 +38,7 @@ def test_seed_keeps_recent_rows_and_leaves_out_transcript_text(tmp_path):
     assert counts["announcements"] == 1          # only the 2-hour-old filing
     assert counts["prices_eod"] == 1             # only yesterday's bar
     conn = connect(target)
-    assert conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0] == 0
+    assert conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0] == 1   # transcripts travel with the seed
     conn.close()
 
 
@@ -55,3 +55,22 @@ def test_empty_disk_starts_from_the_seed_and_existing_data_is_kept(tmp_path):
     fresh.write_bytes(b"")  # simulate an existing database: it must not be overwritten
     ensure_seeded(fresh, seed)
     assert fresh.read_bytes() == b""
+
+
+def test_transcripts_and_notes_are_kept_when_the_next_run_has_none(tmp_path):
+    """The nightly job skips transcripts, so a rebuilt seed must not lose the ones it already had."""
+    source, seed = tmp_path / "ingest.db", tmp_path / "seed.sqlite"
+    make_source(source)
+    build(source, seed, now=NOW)                      # a seed that has the transcript chunk
+
+    empty_source = tmp_path / "nightly.db"
+    conn = connect(empty_source)
+    upsert(conn, "companies", {"ticker": "INFY", "name": "INFY", "in_portfolio": 1, "updated_at": STAMP})
+    conn.commit()
+    conn.close()
+    counts = build(empty_source, seed, now=NOW)       # a run with no transcripts
+
+    assert counts["chunks"] == 1
+    kept = connect(seed)
+    assert kept.execute("SELECT COUNT(*) FROM chunks").fetchone()[0] == 1
+    kept.close()
