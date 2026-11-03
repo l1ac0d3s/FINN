@@ -84,6 +84,8 @@ FINN is a mobile-first investor filter. Push tells an investor what changed. Pul
 - **One company, PAGEIND, did not return quarterly figures** from screener.in in the last run I checked. Its results card shows no figures. I could not fix this without its screener page.
 - **Classification of live announcement subjects** is tested on labelled test subjects only. Subjects no rule matches show as low-tier press releases.
 
+- **The promise check is verified on Infosys and TCS only.** On other companies it can show figures that are not company guidance (Dixon's rows are an example), several companies have no transcripts stored (TITAN is one), and some companies state no numeric guidance at all. Treat it as a working engine that has been checked on two companies, not on all twenty-two.
+
 ## Where I'd take it next
 
 1. Read results figures from the results PDFs, one parser per layout, checked against screener.in.
