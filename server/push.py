@@ -46,15 +46,24 @@ def save_subscription(conn, subscription):
     return True
 
 
+LAST_ERROR = {"text": None}   # the most recent failure from the push service, for diagnosis
+
+
 def _default_sender(subscription, payload, pem, subject):
     from pywebpush import WebPushException, webpush
     try:
         webpush(subscription_info=subscription, data=payload, vapid_private_key=pem,
                 vapid_claims={"sub": subject})
+        LAST_ERROR["text"] = None
         return "sent"
     except WebPushException as exc:
         status = getattr(exc.response, "status_code", None)
+        body = getattr(exc.response, "text", "") or ""
+        LAST_ERROR["text"] = (f"{status} {body[:200]}").strip() or str(exc)[:200]
         return "gone" if status in (404, 410) else "failed"
+    except Exception as exc:   # a broken key or a malformed subscription must not crash the request
+        LAST_ERROR["text"] = f"{type(exc).__name__}: {str(exc)[:200]}"
+        return "failed"
 
 
 def new_high_filings(rows, now=None):
@@ -121,3 +130,8 @@ def send_test(conn, sender=None):
                 conn.execute("DELETE FROM push_subscriptions WHERE subscription_json = ?", (raw,))
             removed += 1
     return sent, removed
+
+
+def subscriber_count(conn):
+    """How many phones are subscribed."""
+    return conn.execute("SELECT COUNT(*) FROM push_subscriptions").fetchone()[0]

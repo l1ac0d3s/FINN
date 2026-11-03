@@ -345,13 +345,15 @@ def company_bull_bear(ticker: str):
 def push_test(authorization: str | None = Header(default=None)):
     """Send a labelled test notification to every subscribed phone. Needs the sync token."""
     require_token(authorization)
-    from server.push import send_test
+    from server.push import LAST_ERROR, configured, send_test, subscriber_count
     conn = db()
     try:
+        subscribers = subscriber_count(conn)
         sent, removed = send_test(conn)
     finally:
         conn.close()
-    return {"sent": sent, "removed": removed}
+    return {"sent": sent, "removed": removed, "subscribers": subscribers,
+            "configured": configured(), "last_error": LAST_ERROR["text"]}
 
 
 @app.get("/api/push/key")
