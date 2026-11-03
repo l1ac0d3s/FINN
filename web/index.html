@@ -539,9 +539,23 @@ function notifyNew(digest) {
   localStorage.setItem("finn-seen", JSON.stringify(updated));
 }
 function urlBase64ToUint8Array(base64) {
-  const padding = "=".repeat((4 - (base64.length % 4)) % 4);
-  const text = (base64 + padding).replace(/-/g, "+").replace(/_/g, "/");
-  return Uint8Array.from(atob(text), (c) => c.charCodeAt(0));
+  // Decodes URL-safe base64 without atob(), so it cannot fail on a browser's stricter decoder.
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+  const clean = base64.replace(/=+$/, "");
+  const out = [];
+  let buffer = 0;
+  let bits = 0;
+  for (const ch of clean) {
+    const value = alphabet.indexOf(ch);
+    if (value < 0) throw new Error(`key contains the character "${ch}", which is not allowed`);
+    buffer = ((buffer << 6) | value) & 0xffffff;
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      out.push((buffer >> bits) & 0xff);
+    }
+  }
+  return new Uint8Array(out);
 }
 
 $("#enable-notifications").addEventListener("click", async () => {
