@@ -97,5 +97,4 @@ FINN is a mobile-first investor filter. Push tells an investor what changed. Pul
 Thank you for the opportunity. I'm happy to walk through any part of it.
 
 Regards,
-[YOUR NAME]
-[YOUR PHONE]
+Aaliyah Ahmed
