@@ -102,3 +102,22 @@ def notify_new(conn, rows, sender=None):
             conn.execute("INSERT OR REPLACE INTO push_sent (id, sent_at) VALUES (?, ?)",
                          (row["id"], datetime.now(timezone.utc).isoformat(timespec="seconds")))
     return sent, removed
+
+
+def send_test(conn, sender=None):
+    """Send one clearly labelled test notification to every subscribed phone. Returns (sent, removed)."""
+    if not configured():
+        return 0, 0
+    sender = sender or _default_sender
+    pem = private_pem()
+    payload = json.dumps({"title": "FINN test", "body": "Notifications are working on this device.", "url": "/"})
+    sent = removed = 0
+    for (raw,) in conn.execute("SELECT subscription_json FROM push_subscriptions").fetchall():
+        result = sender(json.loads(raw), payload, pem, SUBJECT)
+        if result == "sent":
+            sent += 1
+        elif result == "gone":
+            with conn:
+                conn.execute("DELETE FROM push_subscriptions WHERE subscription_json = ?", (raw,))
+            removed += 1
+    return sent, removed

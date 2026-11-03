@@ -341,6 +341,19 @@ def company_bull_bear(ticker: str):
     return {"ticker": ticker.upper(), **bull_and_bear(chunks)}
 
 
+@app.post("/api/push/test")
+def push_test(authorization: str | None = Header(default=None)):
+    """Send a labelled test notification to every subscribed phone. Needs the sync token."""
+    require_token(authorization)
+    from server.push import send_test
+    conn = db()
+    try:
+        sent, removed = send_test(conn)
+    finally:
+        conn.close()
+    return {"sent": sent, "removed": removed}
+
+
 @app.get("/api/push/key")
 def push_key():
     from server.push import PUBLIC, configured
