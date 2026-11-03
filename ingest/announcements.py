@@ -35,6 +35,21 @@ def parse_nse_time(raw):
     raise ValueError(f"unrecognised NSE timestamp: {raw!r}")
 
 
+def find_xbrl(item):
+    """The XBRL file link for an announcement, whatever NSE calls the field.
+
+    Looks first for a field whose name contains 'xbrl', then for any web link ending in .xml or .zip.
+    Returns None when there is none. Field names are unverified until the first live run.
+    """
+    for key, value in item.items():
+        if "xbrl" in str(key).lower() and isinstance(value, str) and value.startswith("http"):
+            return value
+    for value in item.values():
+        if isinstance(value, str) and value.startswith("http") and value.lower().endswith((".xml", ".zip")):
+            return value
+    return None
+
+
 def normalise_nse(item, symbol):
     """Map one NSE record to our announcement fields. Field names are unverified."""
     subject = (item.get("desc") or item.get("subject") or "").strip()
@@ -48,6 +63,7 @@ def normalise_nse(item, symbol):
         "published_at": parse_nse_time(raw_time),
         "subject": subject,
         "attachment_url": attachment,
+        "xbrl_url": find_xbrl(item),
     }
 
 

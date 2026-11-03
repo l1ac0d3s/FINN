@@ -22,6 +22,20 @@ def test_forward_range_takes_the_lower_end_and_the_fiscal_year():
     assert got == {"metric": "revenue", "period": "FY27", "growth_pct": 2.0}
 
 
+def test_margin_and_capex_guidance_is_listed_with_its_figure():
+    margin = statement_from("We expect operating margin of 21% to 22% in FY27.")
+    assert margin == {"metric": "margin", "period": "FY27", "growth_pct": 21.0}
+    capex = statement_from("We expect capex of 5% of revenue in FY27.")
+    assert capex["metric"] == "capex"
+
+
+def test_margin_guidance_gets_no_verdict():
+    result = run_narrative("INFY", [{"id": "c", "page": 2, "label": "x",
+                                     "text": "We expect operating margin of 21% in FY27."}], EIGHT_QUARTERS)
+    assert result["claims"][0]["metric"] == "margin"
+    assert result["claims"][0]["verdict"] == "not checked"
+
+
 def test_reported_and_sequential_sentences_are_not_guidance():
     assert statement_from("Q2 revenues were $5,145 mn, an increase of 1.2% sequentially and 1.5% on YoY.") is None
     assert statement_from("Revenue growth was at 1.9% in constant currency terms.") is None

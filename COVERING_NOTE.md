@@ -37,6 +37,7 @@ FINN is a mobile-first investor filter. Push tells an investor what changed. Pul
 
 **Pull: other outputs**
 - Financial snapshot and four-quarter trajectory, from the stored quarterly figures.
+- Balance sheet and cash quality, by year, from screener.in's balance sheet and cash-flow tables: net worth, borrowings, debt to equity, cash from operations, and cash from operations as a share of net profit. Built and tested on a sample page; the first live check against a real screener page is pending.
 - A credit scorecard at `/credit.html`. You enter debt, cash and interest expense from the annual report. It scores interest cover, net debt to EBITDA, PAT margin and EBITDA trend, and gives a rating and an underwriting view. A chart shows how the score moves as EBITDA falls or rises, at three debt levels.
 
 ## Key decisions and trade-offs
@@ -44,7 +45,7 @@ FINN is a mobile-first investor filter. Push tells an investor what changed. Pul
 - **Data is gathered on a computer, then published to the hosted app.** Financial sites block cloud hosts from the data sources I could reach. The app keeps working when the laptop is off, because the server holds the last published data.
 - **A nightly job on GitHub Actions** is configured to refresh the data each weekday at 18:30 IST. I have not yet confirmed a scheduled run has passed.
 - **Models are used only on the laptop, for two small jobs.** The hosted app makes no model calls. See the Models section below.
-- **EBITDA is screener.in's operating profit,** an approximation of the figure the brief defines. It is labelled as such in the app. The profit view shows where PBT and operating profit diverge, because profit can move for reasons other than operations, such as other income.
+- **EBITDA is PBT + finance costs + depreciation, as the brief defines it,** where the results filing gives those figures. Where it does not, EBITDA is screener.in's operating profit, an approximation, and the app labels which one it shows. The profit view shows where PBT and operating profit diverge, because profit can move for reasons other than operations, such as other income.
 - **Growth is divided by the size of the base,** so a move from a loss to a profit is read as an improvement. A plain percentage gives the opposite sign in that case.
 - **Credit thresholds and promise bands are my assumptions,** not an industry or bank standard. They are shown in the app and in the code.
 - **The filing's meaning line describes the category,** not the document's content. Reading the document itself would need the full PDF text, which I did not build.
@@ -64,23 +65,24 @@ FINN is a mobile-first investor filter. Push tells an investor what changed. Pul
 
 ## What is not finished
 
-- **Results figures come from screener.in,** not from the results filing the brief names. The results card says so.
+- **Results come from screener.in, not from the results filing.** I checked NSE's announcement feed for RELIANCE. Its results items carry only PDF links, and none is flagged as having an XBRL file. A filing parser for XBRL is in the code, but it is never triggered on this feed. Reading the figures from the results PDFs would need one parser per layout, and I did not finish that. The results card says which source it used, and flags any quarter where filing and screener figures differ by more than 1%, once a filing figure exists.
 - **Management-change background from outside the filing.** The app uses only the appointment filing. I did not add a web search, and I did not scrape LinkedIn, because it prohibits scraping. Where a filing has no profile, the card says that.
-- **Business snapshot, balance sheet, cash quality and bull vs bear** are not built. Only the outputs listed above exist.
-- **Guidance** is the list of forward-looking revenue growth statements from transcripts. It does not cover margins, capex or annual reports.
-- **Any NSE ticker.** The engine works on any ticker whose data has been ingested. A ticker that hasn't been ingested cannot be researched on demand yet.
+- **Not built:** business snapshot, bull vs bear, free cash flow (needs capex from the cash-flow statement), and working-capital days (needs receivables and inventory). Screener's summary tables do not carry these figures.
+- **Guidance** covers forward-looking statements from transcripts. Revenue growth guidance is checked against reported figures. Margin and capex guidance is listed with its stated figure, but not checked, because the reported figures for them are not compared yet. Annual reports are not read.
+- **Any NSE ticker, on demand.** Looking up a ticker with no data queues it. The laptop ingests queued tickers at the start of its next daily run, and the page shows the queued message until then. A ticker only appears after that run, not at once.
 - **Notifications** appear only while the app is open. Alerts are not pushed to the phone when it is closed.
 - **BSE is not used.** NSE covers every demo company.
 - **The NSE classification has been tested on labelled test subjects,** not on every live subject line. Subjects no rule matches are shown as low-tier press releases, so they stay visible under Routine.
-- **One company, PAGEIND, did not return quarterly figures** from screener.in in the last run I checked. Its results card shows no figures.
+- **One company, PAGEIND, did not return quarterly figures** from screener.in in the last run I checked. Its results card shows no figures. I could not fix this without its screener page.
+- **Classification of live announcement subjects** is tested on labelled test subjects only. Subjects no rule matches show as low-tier press releases.
 
 ## Where I'd take it next
 
-1. Read results figures from the results filing itself, and reconcile them with screener.in.
+1. Read results figures from the results PDFs, one parser per layout, checked against screener.in.
 2. Add a source for management-change backgrounds beyond the appointment filing, using a licensed data source.
-3. Add guidance on margins and capex, and cash quality from the cash flow statement.
-4. Send push notifications when the app is closed.
-5. Let an investor research any NSE ticker on demand, by ingesting it when first asked.
+3. Add free cash flow and working-capital days, using the full cash-flow statement and the balance sheet notes.
+4. Check margin and capex guidance against reported figures.
+5. Send push notifications when the app is closed.
 
 Thank you for the opportunity. I'm happy to walk through any part of it.
 

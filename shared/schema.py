@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS announcements (
     published_at    TEXT NOT NULL,            -- ISO 8601, UTC
     subject         TEXT NOT NULL,
     attachment_url  TEXT,
+    xbrl_url        TEXT,                     -- structured results file, when the exchange gives one
     category        TEXT NOT NULL,
     tier            TEXT NOT NULL,            -- high | medium | low | hidden
     updated_at      TEXT NOT NULL
@@ -95,12 +96,31 @@ CREATE TABLE IF NOT EXISTS management_bios (
     updated_at    TEXT NOT NULL
 );
 
+-- Yearly balance sheet and operating cash flow, from screener.in's company page.
+CREATE TABLE IF NOT EXISTS annual_figures (
+    id            TEXT PRIMARY KEY,           -- ticker|year
+    ticker        TEXT NOT NULL,
+    year          TEXT NOT NULL,              -- the financial year that ends in March, e.g. '2025'
+    net_worth     REAL,
+    borrowings    REAL,
+    total_assets  REAL,
+    cfo           REAL,                       -- cash from operating activity
+    pat           REAL,                       -- net profit
+    updated_at    TEXT NOT NULL
+);
+
 -- Plain-English notes on promise verdicts, written on the laptop by a small model.
 CREATE TABLE IF NOT EXISTS claim_notes (
     id          TEXT PRIMARY KEY,           -- claim id from server/pull.py
     ticker      TEXT NOT NULL,
     text        TEXT NOT NULL,
     updated_at  TEXT NOT NULL
+);
+
+-- Server only: tickers looked up in the app that have no data yet. The laptop collects and clears them.
+CREATE TABLE IF NOT EXISTS ticker_requests (
+    ticker        TEXT PRIMARY KEY,
+    requested_at  TEXT NOT NULL
 );
 
 -- Server only: user settings, such as alert thresholds.
@@ -141,21 +161,23 @@ PRIMARY_KEY = {
     "classify_cache": "subject_hash",
     "management_bios": "id",
     "claim_notes": "id",
+    "annual_figures": "id",
 }
 
 SYNCED = ["companies", "prices_eod", "announcements", "alerts", "financials_q", "documents", "chunks",
-          "management_bios", "claim_notes"]
+          "management_bios", "claim_notes", "annual_figures"]
 
 COLUMNS = {
     "companies": ["ticker", "name", "in_portfolio", "updated_at"],
     "prices_eod": ["id", "ticker", "date", "close", "adj_close", "volume", "vol_baseline", "updated_at"],
-    "announcements": ["id", "ticker", "published_at", "subject", "attachment_url", "category", "tier", "updated_at"],
+    "announcements": ["id", "ticker", "published_at", "subject", "attachment_url", "xbrl_url", "category", "tier", "updated_at"],
     "alerts": ["id", "ticker", "date", "kind", "detail", "updated_at"],
     "financials_q": ["id", "ticker", "period", "period_end", "revenue", "ebitda", "pbt", "pat", "source", "updated_at"],
     "documents": ["id", "ticker", "doc_type", "period", "url", "label", "updated_at"],
     "chunks": ["id", "document_id", "ticker", "doc_type", "page", "text", "updated_at"],
     "management_bios": ["id", "ticker", "name", "role", "bio", "source_url", "published_at", "updated_at"],
     "claim_notes": ["id", "ticker", "text", "updated_at"],
+    "annual_figures": ["id", "ticker", "year", "net_worth", "borrowings", "total_assets", "cfo", "pat", "updated_at"],
 }
 
 
@@ -165,7 +187,17 @@ def connect(path):
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
     conn.executescript(DDL)
+    _migrate(conn)
     return conn
+
+
+def _migrate(conn):
+    """Add columns that were introduced after a database was first created. CREATE TABLE IF NOT EXISTS
+    does not add columns to an existing table, so this is needed for older files."""
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(announcements)").fetchall()}
+    if "xbrl_url" not in columns:
+        conn.execute("ALTER TABLE announcements ADD COLUMN xbrl_url TEXT")
+        conn.commit()
 
 
 def upsert(conn, table, row):

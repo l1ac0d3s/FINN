@@ -49,15 +49,35 @@ def period_label(sentence):
     return f"FY{year.group(1)}" if year else None
 
 
-def statement_from(sentence):
-    """The fields for one forward-looking revenue growth statement, or None."""
-    if not (PERCENT.search(sentence) or RANGE.search(sentence)):
+MARGIN_OR_CAPEX = re.compile(
+    r"\b(?:operating\s+margins?|ebitda\s+margins?|margins?|capex|capital\s+expenditure)\b", re.I
+)
+
+
+def margin_or_capex(sentence):
+    """'margin' or 'capex' when the sentence is about one of them, otherwise None."""
+    found = MARGIN_OR_CAPEX.search(sentence)
+    if not found:
         return None
-    if not REVENUE.search(sentence) or not GROWTH.search(sentence):
+    return "capex" if re.search(r"capex|capital\s+expenditure", found.group(0), re.I) else "margin"
+
+
+def statement_from(sentence):
+    """The fields for one forward-looking guidance statement with a number, or None.
+
+    Revenue growth is the metric the verdicts check. Margin and capex guidance are listed with their
+    stated figure, but the verdict is 'not checked' for them, because they are not compared with reported figures.
+    """
+    if not (PERCENT.search(sentence) or RANGE.search(sentence)):
         return None
     if not FORWARD.search(sentence) or REPORTED.search(sentence) or SEQUENTIAL.search(sentence):
         return None
-    return {"metric": "revenue", "period": period_label(sentence), "growth_pct": growth_number(sentence)}
+    if REVENUE.search(sentence) and GROWTH.search(sentence):
+        return {"metric": "revenue", "period": period_label(sentence), "growth_pct": growth_number(sentence)}
+    metric = margin_or_capex(sentence)
+    if metric:
+        return {"metric": metric, "period": period_label(sentence), "growth_pct": growth_number(sentence)}
+    return None
 
 
 def guidance_statements(chunks):

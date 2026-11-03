@@ -23,6 +23,38 @@ def year_ago(quarters, latest):
     return None
 
 
+def choose_source(rows):
+    """One row per quarter. The results filing's figures win over screener.in's wherever both exist."""
+    best = {}
+    for row in rows:
+        current = best.get(row["period_end"])
+        if current is None or (row.get("source") == "filing" and current.get("source") != "filing"):
+            best[row["period_end"]] = row
+    return [best[end] for end in sorted(best)]
+
+
+CROSS_CHECK_PCT = 1.0   # the brief's tolerance between the filing and screener.in
+
+
+def cross_check(rows, tolerance_pct=CROSS_CHECK_PCT):
+    """Quarters where the filing and screener.in disagree by more than the tolerance, for each figure."""
+    by_end = {}
+    for row in rows:
+        by_end.setdefault(row["period_end"], {})[row.get("source")] = row
+    flags = []
+    for end in sorted(by_end):
+        both = by_end[end]
+        if "filing" not in both or "screener" not in both:
+            continue
+        for metric in ("revenue", "pbt", "pat"):
+            filed, shown = both["filing"].get(metric), both["screener"].get(metric)
+            diff = growth_pct(filed, shown)
+            if diff is not None and abs(diff) > tolerance_pct:
+                flags.append({"period": both["screener"]["period"], "metric": metric,
+                              "filing": filed, "screener": shown, "diff_pct": round(diff, 1)})
+    return flags
+
+
 def build_results_card(quarters):
     """Latest quarter with QoQ and YoY for each metric, or None if no data."""
     if not quarters:

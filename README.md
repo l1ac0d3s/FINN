@@ -92,17 +92,25 @@ The repository's Actions settings must allow **Read and write** workflow permiss
 | Announcement classification (18 categories) | Built, tested on labelled subject lines. Unmatched subjects show as low-tier press releases |
 | Market line after each filing | Built |
 | Price alerts (z score) and volume alerts | Built, tested |
-| Results card (QoQ, YoY) and profit view | Built, from screener.in figures. Not yet read from the filing PDF |
+| Results card (QoQ, YoY) and profit view | Built, from screener.in. NSE's feed carries no XBRL links, so the filing parser is not used |
+| Balance sheet and cash quality (by year) | Built from screener.in's tables. Tested on a sample page; live page check pending |
 | Management-change profile | Built from the appointment filing, where the filing has a profile |
 | Narrative vs numbers (four quarters) | Built. Deterministic, word-for-word checked, quarter and fiscal-year verdicts |
 | Guidance list | Built, from transcripts only |
 | Financial snapshot and trajectory | Built, from stored quarterly figures |
 | Credit scorecard | Built. Debt, cash and interest are entered by the user |
 | Lookup of an ingested ticker | Built |
+| Lookup of a ticker with no data | Built: queued on the server; the laptop ingests it on its next daily run |
+| Guidance (revenue, margin, capex) | Built from transcripts. Revenue is checked against reported figures; margin and capex are listed only |
 
 ## Not built
 
-- Results figures from the results filing PDF (screener.in is the source).
+- Results figures from the results PDFs (one parser per layout). Results come from screener.in.
+- Free cash flow and working-capital days (need capex, receivables and inventory from the full statements).
+- Business snapshot and bull vs bear.
+- Checking margin and capex guidance against reported figures (they are listed, not checked).
+- Push notifications when the app is closed.
+- BSE data. NSE covers every demo company.
 - Management backgrounds beyond the appointment filing. No web search, no LinkedIn scraping.
 - Business snapshot, balance sheet, cash quality, bull vs bear.
 - BSE fallback.

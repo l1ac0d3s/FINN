@@ -5,6 +5,7 @@ Run from the repo root:
 """
 
 import os
+import re
 import hashlib
 import json
 import shutil
@@ -19,7 +20,7 @@ from fastapi.staticfiles import StaticFiles
 from server.alerts import ALL_CATEGORIES, DEFAULTS, alert_categories, compute_alerts, thresholds, valid_thresholds
 from server.digest import build_digest
 from server.pull import run_narrative, with_notes
-from server.results import build_results_card
+from server.results import build_results_card, choose_source, cross_check
 from server.risk import credit_model, sensitivity, ttm_from_quarters
 from server.snapshot import financial_snapshot, trajectory
 from shared.schema import SYNCED, connect, upsert
@@ -124,7 +125,10 @@ def company_results(ticker: str):
         (ticker.upper(),),
     ).fetchall()
     conn.close()
-    card = build_results_card([dict(r) for r in rows])
+    raw = [dict(r) for r in rows]
+    card = build_results_card(choose_source(raw))
+    if card is not None:
+        card["cross_check"] = cross_check(raw)
     if card is None:
         raise HTTPException(status_code=404, detail=f"no quarterly figures for {ticker}")
     return card
@@ -137,11 +141,14 @@ def claim_notes_for(conn, ticker):
 
 
 def quarter_rows(conn, ticker):
-    return [dict(r) for r in conn.execute(
+    """One figure per quarter: the filing's where it exists, screener's otherwise. Used by every calculation,
+    so a quarter is never counted twice."""
+    rows = [dict(r) for r in conn.execute(
         "SELECT period, period_end, revenue, ebitda, pbt, pat, source FROM financials_q "
         "WHERE ticker = ? ORDER BY period_end",
         (ticker,),
     ).fetchall()]
+    return choose_source(rows)
 
 
 @app.post("/api/pull/{ticker}/narrative")
@@ -258,6 +265,77 @@ def company_credit(ticker: str, debt: float = Query(..., ge=0), interest: float 
         "inputs": {"debt": debt, "cash": cash, "interest": interest},
         **credit_model(ttm, debt, cash, interest),
         "sensitivity": sensitivity(ttm, debt, cash, interest),
+    }
+
+
+TICKER_PATTERN = re.compile(r"^[A-Z0-9&-]{1,20}$")
+
+
+def require_token(authorization):
+    if not SYNC_TOKEN or authorization != f"Bearer {SYNC_TOKEN}":
+        raise HTTPException(status_code=401, detail="bad token")
+
+
+@app.post("/api/request/{ticker}")
+def request_ticker(ticker: str):
+    """Queue a ticker that has no data yet. The laptop ingests queued tickers on its next daily run."""
+    symbol = ticker.strip().upper()
+    if not TICKER_PATTERN.match(symbol):
+        raise HTTPException(status_code=400, detail="not a valid NSE symbol")
+    conn = db()
+    try:
+        with conn:
+            conn.execute("INSERT OR IGNORE INTO ticker_requests (ticker, requested_at) VALUES (?, ?)",
+                         (symbol, datetime.now(timezone.utc).isoformat(timespec="seconds")))
+    finally:
+        conn.close()
+    return {"ok": True, "ticker": symbol, "status": "queued"}
+
+
+@app.get("/api/requests")
+def pending_requests(authorization: str | None = Header(default=None)):
+    require_token(authorization)
+    conn = db()
+    try:
+        rows = conn.execute("SELECT ticker FROM ticker_requests ORDER BY requested_at").fetchall()
+    finally:
+        conn.close()
+    return {"tickers": [r["ticker"] for r in rows]}
+
+
+@app.post("/api/requests/clear")
+def clear_requests(body: dict = Body(...), authorization: str | None = Header(default=None)):
+    require_token(authorization)
+    tickers = [t for t in body.get("tickers", []) if isinstance(t, str)]
+    conn = db()
+    try:
+        with conn:
+            for t in tickers:
+                conn.execute("DELETE FROM ticker_requests WHERE ticker = ?", (t,))
+    finally:
+        conn.close()
+    return {"ok": True, "cleared": len(tickers)}
+
+
+@app.get("/api/company/{ticker}/annual")
+def company_annual(ticker: str):
+    """Yearly net worth, borrowings, debt to equity, operating cash flow and cash quality."""
+    from ingest.annual import view
+    conn = db()
+    try:
+        rows = [dict(r) for r in conn.execute(
+            "SELECT year, net_worth, borrowings, total_assets, cfo, pat FROM annual_figures WHERE ticker = ?",
+            (ticker.upper(),),
+        ).fetchall()]
+    finally:
+        conn.close()
+    if not rows:
+        raise HTTPException(status_code=404, detail=f"no balance sheet figures for {ticker}")
+    return {
+        "ticker": ticker.upper(),
+        "unit": "Rs crore",
+        "years": view(rows),
+        "not_built": ["free cash flow (needs capex)", "working-capital days (needs receivables and inventory)"],
     }
 
 

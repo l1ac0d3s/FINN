@@ -26,8 +26,9 @@ def now_iso():
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def tickers():
-    return config.PORTFOLIO + [t for t in config.ADHOC if t not in config.PORTFOLIO]
+def tickers(extra=()):
+    base = config.PORTFOLIO + [t for t in config.ADHOC if t not in config.PORTFOLIO]
+    return base + [t for t in extra if t not in base]
 
 
 def register_companies(conn, ticker_list):
@@ -118,6 +119,8 @@ def store_screener(conn, ticker, session):
             "label": d["label"],
             "updated_at": stamp,
         })
+    from ingest.annual import store_annual
+    store_annual(conn, ticker, html)   # balance sheet and cash flow; never stops the run
     return len(quarters), len(docs)
 
 
@@ -164,11 +167,13 @@ def llm_client():
 
 
 def run(do_publish, skip_text=False):
+    from ingest.requests import clear_queued, fetch_queued
     conn = connect(config.INGEST_DB)
-    ticker_list = tickers()
+    session = requests.Session()
+    queued = fetch_queued(session)              # tickers looked up in the app since the last run
+    ticker_list = tickers(queued)
     register_companies(conn, ticker_list)
     client = llm_client()
-    session = requests.Session()
     summary = []
     bars_total = 0
     items_total = 0
@@ -199,6 +204,12 @@ def run(do_publish, skip_text=False):
         except Exception as exc:
             summary.append(f"{ticker}: screener failed ({exc})")
         try:
+            from ingest.filing import store_filing_results
+            filed, bad = store_filing_results(conn, ticker, session)
+            summary.append(f"{ticker}: {filed} quarters read from results filings, {bad} filings failed")
+        except Exception as exc:
+            summary.append(f"{ticker}: results filings failed ({exc})")
+        try:
             stored, failed = (0, 0) if skip_text else store_texts(conn, ticker, session)
             text_total += stored
             summary.append(f"{ticker}: {stored} text chunks, {failed} PDFs failed")
@@ -221,6 +232,7 @@ def run(do_publish, skip_text=False):
             summary.append(f"{ticker}: promise notes failed ({exc})")
         conn.commit()
 
+    clear_queued(session, queued)
     print("\n".join(summary))
     print(f"\nTotal: {bars_total} price bars, {items_total} announcements, "
           f"{fundamentals_total} screener rows, {text_total} text chunks")

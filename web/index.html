@@ -247,6 +247,15 @@ function itemCard(a) {
   </article>`;
 }
 
+function crossHTML(flags) {
+  if (!flags || !flags.length) return "";
+  const rows = flags.map((f) => `<li>${esc(f.period)} · ${esc(f.metric.toUpperCase())}: filing ${esc(fmtNum(f.filing))},
+    screener ${esc(fmtNum(f.screener))} (${esc(fmtPct(f.diff_pct))})</li>`).join("");
+  return `<div class="profit"><p><strong>Check against screener.in</strong></p>
+    <p class="note">These figures differ by more than 1%. The filing's figure is shown above.</p>
+    <ul class="claims">${rows}</ul></div>`;
+}
+
 function profitHTML(v) {
   if (!v || v.gap_pts == null) return "";
   return `<div class="profit"><p><strong>Profit view</strong> · EBITDA ${esc(fmtPct(v.ebitda_yoy_pct))}
@@ -264,10 +273,10 @@ function resultsTable(card) {
   }).join("");
   const yoyNote = card.has_yoy ? "" : " YoY unavailable: the year-ago quarter is not in the data.";
   return `<table class="results">
-    <caption>${esc(card.period)} · Rs crore</caption>
+    <caption>${esc(card.period)} · Rs crore · ${card.source === "filing" ? "from the results filing" : "from screener.in"}</caption>
     <thead><tr><th></th><th>Value</th><th>QoQ</th><th>YoY</th></tr></thead>
     <tbody>${rows}</tbody></table>
-    <p class="note">EBITDA is screener.in's Operating Profit. The formula PBT + finance cost + depreciation is not read from the filing yet.${esc(yoyNote)}</p>${profitHTML(card.profit_view)}`;
+    <p class="note">EBITDA = PBT + finance costs + depreciation. Where the filing has no such figures, it is screener.in's operating profit.${esc(yoyNote)}</p>${profitHTML(card.profit_view)}${crossHTML(card.cross_check)}`;
 }
 
 function quartersTable(rows) {
@@ -291,7 +300,7 @@ function claimsHTML(result) {
   const items = result.claims.map((c) => `<li>
     <span class="verdict ${esc(c.verdict.replace(/ /g, "-"))}">${esc(c.verdict)}</span>
     <p>“${esc(c.quote)}”</p>
-    <p class="note">${esc(c.doc)} · page ${esc(c.page)} · promised ${esc(fmtPct(c.promised_growth_pct))}
+    <p class="note">${esc(c.doc)} · page ${esc(c.page)} · ${esc(c.metric || "revenue")} promised ${esc(fmtPct(c.promised_growth_pct))}
       for ${esc(c.period || "an unstated period")} · reported YoY ${esc(fmtPct(c.actual_yoy_pct))}</p>
     ${c.explanation ? `<p class="note">${esc(c.explanation)}</p>` : ""}
   </li>`).join("");
@@ -417,9 +426,26 @@ $("#lookup-form").addEventListener("submit", async (event) => {
     out.insertAdjacentHTML("beforeend", `<div class="card"><div class="meta"><span class="ticker">${esc(ticker)} snapshot</span><span>${esc(f.period)}</span></div>
       <p>Revenue ${esc(fmtNum(f.revenue))} · EBITDA margin ${esc(fmtPct(f.ebitda_margin_pct))} · PAT margin ${esc(fmtPct(f.pat_margin_pct))}</p>
       <p class="meaning">Trajectory: revenue growth is ${esc(snap.trajectory.direction)}.</p></div>`);
-    out.insertAdjacentHTML("beforeend", `<div class="slot"><button class="action" data-claims="${esc(ticker)}">Check management claims</button><div class="claims-out"></div></div>`);
+    try {
+      const annual = await getJSON(`/api/company/${encodeURIComponent(ticker)}/annual`);
+      const ratio = (v) => (v == null ? "—" : Number(v).toFixed(2));
+      const rows = annual.years.map((y) => `<tr><td>${esc(y.year)}</td><td class="num">${esc(fmtNum(y.net_worth))}</td>
+        <td class="num">${esc(fmtNum(y.borrowings))}</td><td class="num">${esc(ratio(y.debt_to_equity_x))}</td>
+        <td class="num">${esc(fmtNum(y.cfo))}</td><td class="num">${esc(fmtPct(y.cash_quality_pct))}</td></tr>`).join("");
+      out.insertAdjacentHTML("beforeend", `<div class="card"><div class="meta"><span class="ticker">${esc(ticker)} balance sheet</span><span>Rs crore</span></div>
+        <table class="results"><thead><tr><th>Year</th><th>Net worth</th><th>Borrowings</th><th>Debt/equity</th><th>Cash from ops</th><th>Cash quality</th></tr></thead>
+        <tbody>${rows}</tbody></table>
+        <p class="note">Cash quality = cash from operations ÷ net profit. Free cash flow and working-capital days are not built.</p></div>`);
+    } catch (err) {
+      out.insertAdjacentHTML("beforeend", `<p class="note">No balance sheet figures from screener.in for ${esc(ticker)} yet.</p>`);
+    }
+    out.insertAdjacentHTML("beforeend", `<div class="slot"><button class="action" data-claims="${esc(ticker)}">Check promises against results</button><div class="claims-out"></div></div>`);
   } catch (err) {
-    out.innerHTML = `<p class="note">No figures stored for ${esc(ticker)} yet. Add it to the config and refresh the data.</p>`;
+    const resp = await fetch(`/api/request/${encodeURIComponent(ticker)}`, { method: "POST" }).catch(() => null);
+    const queued = resp && resp.ok;
+    out.innerHTML = `<p class="note">${queued
+      ? `${esc(ticker)} has no data yet. It is queued, and the laptop adds it on its next daily run. Look again after that.`
+      : `No figures stored for ${esc(ticker)} yet, and the symbol could not be queued.`}</p>`;
   }
 });
 
