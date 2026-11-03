@@ -64,7 +64,7 @@ def ask_model(client, prompt):
 
 def transcript_chunks(conn, ticker):
     return [dict(r) for r in conn.execute(
-        "SELECT c.id, c.page, c.text, d.label FROM chunks c "
+        "SELECT c.id, c.document_id, c.page, c.text, d.label FROM chunks c "
         "JOIN documents d ON d.id = c.document_id "
         "WHERE c.ticker = ? AND c.doc_type = 'transcript'",
         (ticker,),
@@ -90,7 +90,7 @@ def store_claim_notes(conn, ticker, client):
     written = rejected = 0
     stamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
     for claim in result["claims"]:
-        if claim["verdict"] not in GRADED or claim["id"] in have:
+        if claim["verdict"] not in GRADED or claim.get("metric") != "revenue" or claim["id"] in have:
             continue
         prompt = build_prompt(ticker, claim)
         note = accept_note(prompt, ask_model(client, prompt))

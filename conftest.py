@@ -6,7 +6,7 @@ seed database, so results do not depend on what is set in the shell or in the re
 
 import pytest
 
-MODEL_VARS = ["FINN_LLM_KEY", "HF_TOKEN", "FINN_LLM_URL", "FINN_LLM_MODEL"]
+MODEL_VARS = ["ANTHROPIC_API_KEY", "VAPID_PUBLIC_KEY", "VAPID_PRIVATE_B64"]
 
 
 @pytest.fixture(autouse=True)

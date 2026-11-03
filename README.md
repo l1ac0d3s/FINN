@@ -69,8 +69,10 @@ which must match the `FINN_SYNC_TOKEN` set on Render.
 2. Set these environment variables on Render: `FINN_SYNC_TOKEN` (a long random string) and `FINN_SERVER_DB` (`data/server.db`).
 3. After any change to the server code, use **Manual Deploy → Deploy latest commit**.
 
-Render's free plan wipes the disk on a redeploy. The seed file fills an empty disk, so the app is never blank, but
-the latest figures come only from the last publish.
+Render's free plan has a temporary disk: a redeploy wipes it, and an idle restart probably does too. The seed file fills
+an empty disk with the data, including transcripts, so the app is never blank. Two things are not in the seed and are lost
+then: saved phones for notifications, and alert settings changed in the app. The latest figures come from the last seed
+or publish.
 
 ## Nightly refresh (GitHub Actions)
 

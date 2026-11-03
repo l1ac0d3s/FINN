@@ -162,7 +162,7 @@ def pull_narrative(ticker: str):
     conn = db()
     try:
         chunks = [dict(r) for r in conn.execute(
-            "SELECT c.id, c.page, c.text, d.label FROM chunks c "
+            "SELECT c.id, c.document_id, c.page, c.text, d.label FROM chunks c "
             "JOIN documents d ON d.id = c.document_id "
             "WHERE c.ticker = ? AND c.doc_type = 'transcript'",
             (ticker,),
@@ -171,7 +171,7 @@ def pull_narrative(ticker: str):
             raise HTTPException(status_code=404, detail=f"no transcripts stored for {ticker}")
         quarters = quarter_rows(conn, ticker)
 
-        key = hashlib.sha1("|".join(["v3", ticker] + sorted(c["id"] for c in chunks)).encode()).hexdigest()
+        key = hashlib.sha1("|".join(["v4", ticker] + sorted(c["id"] for c in chunks)).encode()).hexdigest()
         cached = conn.execute("SELECT output_json FROM pull_cache WHERE key = ?", (key,)).fetchone()
         if cached:
             return {**with_notes(json.loads(cached["output_json"]), claim_notes_for(conn, ticker)), "cached": True}
@@ -329,7 +329,7 @@ def company_bull_bear(ticker: str):
     conn = db()
     try:
         chunks = [dict(r) for r in conn.execute(
-            "SELECT c.id, c.page, c.text, d.label FROM chunks c "
+            "SELECT c.id, c.document_id, c.page, c.text, d.label FROM chunks c "
             "JOIN documents d ON d.id = c.document_id "
             "WHERE c.ticker = ? AND c.doc_type = 'transcript'",
             (ticker.upper(),),

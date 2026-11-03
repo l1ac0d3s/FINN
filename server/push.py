@@ -16,16 +16,24 @@ Rules:
 import base64
 import json
 import os
+import re
 from datetime import datetime, timedelta, timezone
 
-PUBLIC = os.environ.get("VAPID_PUBLIC_KEY", "")
-PRIVATE_B64 = os.environ.get("VAPID_PRIVATE_B64", "")
+def _clean(value):
+    """A pasted key often carries a stray space or line break. Remove all whitespace."""
+    return "".join((value or "").split())
+
+
+PUBLIC = _clean(os.environ.get("VAPID_PUBLIC_KEY", ""))
+PRIVATE_B64 = _clean(os.environ.get("VAPID_PRIVATE_B64", ""))
+PUBLIC_PATTERN = re.compile(r"^[A-Za-z0-9_-]{80,100}$")   # a P-256 point in URL-safe base64 is 87 characters
 SUBJECT = os.environ.get("VAPID_SUBJECT", "mailto:finn@example.com")
 RECENT = timedelta(hours=24)
 
 
 def configured():
-    return bool(PUBLIC and PRIVATE_B64)
+    """True only when both keys are set and the public key has the shape a browser accepts."""
+    return bool(PUBLIC and PRIVATE_B64 and PUBLIC_PATTERN.match(PUBLIC))
 
 
 def private_pem():

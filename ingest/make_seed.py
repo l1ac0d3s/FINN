@@ -1,4 +1,4 @@
-﻿"""Build the seed database that the hosted app starts from.
+"""Build the seed database that the hosted app starts from.
 
 Run on your computer after the daily ingest:
     python -m ingest.make_seed

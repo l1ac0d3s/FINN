@@ -4,8 +4,6 @@ The HTML below is a sample written to match screener's usual section layout. It 
 page. The parser is checked on real pages during the live run.
 """
 
-import sqlite3
-
 import pytest
 
 from ingest.annual import clean_label, metrics, parse_annual, store_annual, view

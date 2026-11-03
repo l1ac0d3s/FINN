@@ -91,14 +91,16 @@ def judge(actual, promised):
     return grade(achievement_pct(promised, actual)) or "not checked"
 
 
+def fy_quarter_ends(year):
+    """The four quarter-end dates of the fiscal year that ends in March of `year` (FY26 is 2026)."""
+    return {f"{year - 1}-06-30", f"{year - 1}-09-30", f"{year - 1}-12-31", f"{year}-03-31"}
+
+
 def fiscal_year_growth(quarters, fy):
     """Actual revenue growth for a full fiscal year (April to March) over the year before, summed from
     four quarters each. `fy` is the calendar year the year ends in, so FY26 is 2026. None if any quarter is missing."""
-    def ends(year):
-        return {f"{year - 1}-06-30", f"{year - 1}-09-30", f"{year - 1}-12-31", f"{year}-03-31"}
-
-    current = [q for q in quarters if q["period_end"] in ends(fy)]
-    prior = [q for q in quarters if q["period_end"] in ends(fy - 1)]
+    current = [q for q in quarters if q["period_end"] in fy_quarter_ends(fy)]
+    prior = [q for q in quarters if q["period_end"] in fy_quarter_ends(fy - 1)]
     if len(current) < 4 or len(prior) < 4 or any(q.get("revenue") is None for q in current + prior):
         return None
     total_now = sum(q["revenue"] for q in current)
@@ -106,10 +108,48 @@ def fiscal_year_growth(quarters, fy):
     return round((total_now / total_before - 1) * 100, 1)
 
 
-def verdict_for(claim, quarters):
-    """(actual YoY revenue growth, verdict) for a claim about revenue growth in a named quarter or fiscal year."""
-    if claim.get("metric") != "revenue" or claim.get("growth_pct") is None:
+def margin_verdict(claim, quarters):
+    """(reported operating margin, verdict) for margin guidance, using screener's operating profit over revenue.
+
+    A full fiscal year gives 'met' or 'missed'. A year still in progress uses the quarters so far and gives
+    'on track' or 'behind'. A margin at or above the guided lower end counts as meeting the guidance.
+    """
+    period = claim.get("period") or ""
+    fy = FY_PERIOD.match(period)
+    if fy:
+        year_rows = [q for q in quarters if q["period_end"] in fy_quarter_ends(2000 + int(fy.group(1)))]
+        if not year_rows:
+            return None, "pending"
+        complete = len(year_rows) == 4
+    else:
+        target = quarter_end(period)
+        year_rows = [q for q in quarters if q["period_end"] == target] if target else []
+        complete = True
+    rows = [q for q in year_rows if q.get("ebitda") is not None and q.get("revenue")]
+    if not rows:
         return None, "not checked"
+    margin = round(sum(q["ebitda"] for q in rows) / sum(q["revenue"] for q in rows) * 100, 1)
+    meets = margin >= float(claim["growth_pct"])
+    if complete:
+        return margin, "met" if meets else "missed"
+    return margin, "on track" if meets else "behind"
+
+
+def verdict_for(claim, quarters):
+    """(reported figure, verdict) for a claim. Revenue growth is compared with reported year-on-year growth,
+    and margin guidance with the reported operating margin.
+
+    Guidance in constant currency is never compared with the stored rupee revenue: the two are not the same
+    measure, so the verdict is 'not comparable' rather than a misleading 'met'.
+    """
+    if claim.get("growth_pct") is None:
+        return None, "not checked"
+    if claim.get("metric") == "margin":
+        return margin_verdict(claim, quarters)
+    if claim.get("metric") != "revenue":
+        return None, "not checked"
+    if "constant currency" in str(claim.get("quote", "")).lower():
+        return None, "not comparable"
     promised = float(claim["growth_pct"])
     fy = FY_PERIOD.match(claim.get("period") or "")
     if fy:
@@ -169,7 +209,7 @@ def run_narrative(ticker, chunks, quarters):
     kept, dropped = ground(found, chunks)
     claims, seen = [], set()
     for claim in kept:
-        key = (normalise(claim["quote"]), claim["page"])
+        key = (normalise(claim["quote"]), claim["doc"])   # the same sentence on several pages of one call is one row
         if key in seen:
             continue
         seen.add(key)
@@ -181,6 +221,7 @@ def run_narrative(ticker, chunks, quarters):
             "metric": claim.get("metric"),
             "period": claim.get("period"),
             "promised_growth_pct": claim.get("growth_pct"),
+            "promised_upper_pct": claim.get("upper"),
             "actual_yoy_pct": actual,
             "verdict": verdict,
         }

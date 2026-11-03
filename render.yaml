@@ -9,7 +9,11 @@ services:
     envVars:
       - key: FINN_SYNC_TOKEN
         sync: false          # set in the Render dashboard, not in this file
-      - key: HF_TOKEN
-        sync: false          # set in the Render dashboard, not in this file
+      - key: VAPID_PUBLIC_KEY
+        sync: false          # push notifications: see README, "Push setup"
+      - key: VAPID_PRIVATE_B64
+        sync: false
+      - key: VAPID_SUBJECT
+        sync: false
       - key: FINN_SERVER_DB
         value: data/server.db

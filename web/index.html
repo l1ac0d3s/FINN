@@ -105,6 +105,9 @@ ul.claims p { margin: 4px 0; }
 .verdict.pending, .verdict.not-checked, .verdict.not-available { color: var(--muted); }
 .verdict.nearly-met { color: var(--up); }
 .verdict.partly-met { color: #b7791f; }
+.verdict.on-track { color: var(--up); }
+.verdict.behind { color: #b7791f; }
+.verdict.not-comparable { color: var(--muted); }
 .profit { margin-top: 10px; padding: 8px 10px; border-left: 3px solid var(--accent); border-radius: 8px; background: rgba(127, 127, 127, 0.08); }
 .profit p { margin: 4px 0; font-size: 13px; }
 .bio { margin-top: 10px; padding: 10px 12px; border-left: 3px solid var(--accent); border-radius: 8px; background: rgba(127, 127, 127, 0.08); }
@@ -291,6 +294,25 @@ function quartersTable(rows) {
     <thead><tr><th></th><th>Revenue</th><th>QoQ</th><th>YoY</th></tr></thead><tbody>${body}</tbody></table>`;
 }
 
+const VERDICT_HINTS = {
+  "pending": "The period is not complete yet, so there is nothing to compare with.",
+  "not comparable": "This guidance is in constant currency. The stored figures are in rupees, so the two can't be compared.",
+  "on track": "Year to date, the reported margin is at or above the guided lower end.",
+  "behind": "Year to date, the reported margin is below the guided lower end.",
+  "not checked": "No year could be worked out for this statement, so it is shown but not compared.",
+};
+
+function promiseLine(c) {
+  const plain = (v) => (v == null ? "—" : `${Number(v).toFixed(1)}%`);
+  const promised = c.promised_upper_pct != null
+    ? `${plain(c.promised_growth_pct)} to ${plain(c.promised_upper_pct)}` : plain(c.promised_growth_pct);
+  const reported = c.metric === "margin"
+    ? `reported margin ${plain(c.actual_yoy_pct)}` : `reported YoY ${fmtPct(c.actual_yoy_pct)}`;
+  const hint = VERDICT_HINTS[c.verdict] ? `<br>${esc(VERDICT_HINTS[c.verdict])}` : "";
+  return `<p class="note">${esc(c.doc)} · page ${esc(c.page)} · ${esc(c.metric || "revenue")} promised ${esc(promised)}
+    for ${esc(c.period || "an unstated period")} · ${esc(reported)}${hint}</p>`;
+}
+
 function claimsHTML(result) {
   const table = quartersTable(result.quarters);
   const note = `<p class="note">Guidance is often stated in constant currency, and this check compares reported rupee revenue, so small gaps are expected. ${esc(result.dropped)} statements failed the word-for-word check and were dropped.</p>`;
@@ -299,12 +321,11 @@ function claimsHTML(result) {
     return `${table}<p class="verdict not-checked">Not found in source</p><p class="note">${esc(reason)}</p>${note}`;
   }
   const count = (verdict) => result.claims.filter((c) => c.verdict === verdict).length;
-  const tally = `<p class="note">Promises: ${count("met")} met · ${count("nearly met")} nearly met · ${count("partly met")} partly met · ${count("missed")} missed · ${count("pending")} pending · ${count("not checked")} not checked. Each verdict shows the share of the promise delivered.</p>`;
+  const tally = `<p class="note">Promises: ${count("met")} met · ${count("nearly met")} nearly met · ${count("partly met")} partly met · ${count("missed")} missed · ${count("on track")} on track · ${count("behind")} behind · ${count("pending")} pending · ${count("not comparable")} not comparable · ${count("not checked")} not checked.</p>`;
   const items = result.claims.map((c) => `<li>
     <span class="verdict ${esc(c.verdict.replace(/ /g, "-"))}">${esc(c.verdict)}</span>
     <p>“${esc(c.quote)}”</p>
-    <p class="note">${esc(c.doc)} · page ${esc(c.page)} · ${esc(c.metric || "revenue")} promised ${esc(fmtPct(c.promised_growth_pct))}
-      for ${esc(c.period || "an unstated period")} · reported YoY ${esc(fmtPct(c.actual_yoy_pct))}</p>
+    ${promiseLine(c)}
     ${c.explanation ? `<p class="note">${esc(c.explanation)}</p>` : ""}
   </li>`).join("");
   return `${table}${tally}<ul class="claims">${items}</ul>${note}`;
@@ -583,9 +604,10 @@ $("#enable-notifications").addEventListener("click", async () => {
       userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(key),
     });
     step = "save subscription";
-    await fetch("/api/push/subscribe", {
+    const saved = await fetch("/api/push/subscribe", {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(subscription.toJSON()),
     });
+    if (!saved.ok) throw new Error(`the server did not save this phone (status ${saved.status})`);
     msg.textContent = "On. New high-priority filings reach this phone, even when the app is closed.";
   } catch (err) {
     msg.textContent = `Could not turn on notifications at the "${step}" step: ${err.name || "Error"}: ${err.message}`;

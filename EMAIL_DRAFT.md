@@ -5,39 +5,45 @@ Dear ENAM team,
 
 Please find my submission for the FINN build challenge.
 
-Live prototype (mobile-friendly web app): https://finn-wq09.onrender.com
-Repository: https://github.com/l1ac0d3s/FINN
-AI build history: https://claude.ai/code/session_01A1LVKziQJcCEW5rvXbFFn9
+Links
+- Live prototype (mobile-friendly): https://finn-wq09.onrender.com
+  The app runs on a free hosting plan, so the first visit can take up to a minute.
+- Repository: https://github.com/l1ac0d3s/FINN
+- AI build history: https://claude.ai/code/session_01A1LVKziQJcCEW5rvXbFFn9
 
----
+What it does
+FINN is a mobile-first investor filter with a push view and a pull view.
+Push: a digest for 24 hours, 3 days, 7 days or a custom period, with filings prioritised into High, Medium,
+Routine and Hidden, and a morning brief that asks one question per important filing. Management changes show the
+person's profile from the appointment filing, or an entry I made by hand with its source link. Results cards show
+revenue, EBITDA, PBT and PAT with QoQ and YoY, and compare operating profit with PBT. Price alerts use a z-score
+against each stock's own last 30 sessions, so a utility and a volatile small cap are judged on their own behaviour.
+Notifications reach a subscribed phone, including when the app is closed.
+Pull: promised versus delivered. Forward-looking statements are taken from the earnings-call transcripts, each
+checked word for word against its page. Revenue guidance is compared with reported growth, margin guidance with the
+reported operating margin, and each is graded by the share of the promise delivered. A balance sheet and cash
+quality view, bull and bear points quoted from the transcripts, and a credit scorecard with a sensitivity chart.
 
-## What I built
+Key decisions
+- The hosted app makes no model calls. Growth, verdicts, alerts and the credit score are code, and every threshold
+  is written in the repository. Small local models could not follow the output format, so I used rules and kept the
+  word-for-word check. Optional Claude Haiku steps on the laptop (plain-English notes, labels) are not enabled in the
+  submitted data.
+- Guidance in constant currency, such as Infosys's, is marked "not comparable" with rupee revenue, instead of showing
+  a misleading "met".
+- EBITDA is PBT + finance costs + depreciation where a results filing gives them, otherwise screener.in's operating
+  profit, and the app says which.
 
-FINN is a mobile-first web app with two modes. Push shows what changed in an 18-company portfolio plus 4 ad-hoc tickers: a time-windowed digest, announcements sorted into priority tiers, price and volume alerts with configurable thresholds, and results cards with QoQ and YoY growth. Every filing card shows how the stock moved on the next session. Pull runs a narrative-vs-numbers analysis on one company, grounded in earnings-call transcripts.
+Not built
+- Results figures mostly come from screener.in. Results PDFs are read only for the layouts I have checked.
+- Management backgrounds beyond the appointment filing and my hand entries. I did not scrape LinkedIn.
+- Business snapshot, free cash flow and working-capital days, and BSE data.
+- On the free hosting plan, saved phones and changed alert settings are lost when the server redeploys.
 
-## Key decisions and trade-offs
+The full write-up, including the limits, is in the attached COVERING_NOTE.md. The README explains how to run and
+deploy it.
 
-- **Rules before models:** classification uses the 18 reference categories from your companion document. A model is called only for unmatched subjects, keeping cost near zero.
-- **Verdicts from figures, not the model:** the model extracts verbatim quotes; claims that fail the quote check are dropped. Verdicts compare against reported financials.
-- **Ingest on my machine, serve from the cloud:** the financial data sites are reachable from a normal network but not from cloud sandboxes, so the laptop does the ingest and the server only stores and serves.
-- **Free tier throughout:** Hugging Face free model for the pull feature, Render free plan for hosting, no spend required.
-
-## What I left out
-
-Management-change bios (no reliable source), BSE fallback, and the other pull outputs (guidance, cash quality, balance sheet, trajectory, bull vs bear). The narrative-vs-numbers is the worked example the brief asks for.
-
-## Where I'd take it next
-
-1. Run the claims check on all 22 companies and tune the prompt.
-2. Add the other pull outputs, starting with guidance and cash quality.
-3. Move ingest to a scheduled job (no laptop dependency).
-4. Background push notifications for high-priority filings.
-
----
-
-The full covering note is in the repository at COVERING_NOTE.md.
-
-Thank you for the opportunity. Please reply if you would like anything clarified.
+Thank you for the opportunity. I'm happy to walk through any part of it.
 
 Regards,
 [YOUR NAME]
