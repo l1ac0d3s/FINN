@@ -30,7 +30,7 @@ FINN is a mobile-first investor filter. Push tells an investor what changed. Pul
 - You set the thresholds in the app, and choose which announcement types raise an alert. Changes apply at once, without a re-run.
 
 **Pull: narrative vs numbers (the worked example)**
-- Forward-looking revenue growth statements are taken directly from the last four earnings-call transcripts. A sentence qualifies only if it states a percentage, is about revenue or growth, looks forward-looking, and is not a reported or sequential figure.
+- Forward-looking revenue growth statements are taken directly from the last four earnings-call transcripts. A sentence qualifies only if it states a percentage, is about revenue or growth, looks forward-looking, and is not a reported or sequential figure. An analyst's question, and a statement about a period that had already ended on the day of the call, are ignored, because they report a result and do not make a promise.
 - Each statement must match the source word for word, on the stated page. Anything that doesn't match is dropped and counted.
 - When a sentence names no year, the year is worked out from the call it was said on, using references such as "H1 of FY27". "For the year" means the call's own year, and "the coming year" means the next. On a year-end call nothing is guessed.
 - Each revenue statement is compared with reported figures. A single quarter is compared with the same quarter a year earlier. A full fiscal year (April to March) is compared with the year before, summed from four quarters each. A year that is still in progress is shown as pending.

@@ -22,15 +22,17 @@ REVENUE = re.compile(r"\b(?:revenues?|sales|top\s?line)\b", re.I)
 GROWTH = re.compile(r"\b(?:growth|grow|growing|increase|expand)\w*", re.I)
 FORWARD = re.compile(
     r"\b(?:expect\w*|guid\w*|outlook|anticipat\w*|target\w*|we see|going forward|should|will|likely)\b"
-    r"|\bFY\s?\d{2}\b|\bnext (?:year|quarter)\b",
+    r"|\bnext (?:year|quarter)\b",
     re.I,
 )
 REPORTED = re.compile(
-    r"\b(?:was|were|grew|came in|delivered|reported|stood at|achieved|been able to|maintained)\b", re.I
+    r"\b(?:was|were|grew|came in|delivered|reported|stood at|achieved|been able to|maintained|done|recorded|"
+    r"registering|registered|posted|clocked)\b", re.I
 )
 SEQUENTIAL = re.compile(r"sequential|quarter-on-quarter|\bQoQ\b", re.I)
-PERIOD_Q = re.compile(r"\bQ([1-4])\s*FY\s?(\d{2})\b", re.I)
-PERIOD_FY = re.compile(r"\bFY\s?(\d{2})\b", re.I)
+FISCAL_YEAR = r"FY\s?(?:20)?(\d{2})\b"     # FY26, FY2026 and FY 2026 all read as 26
+PERIOD_Q = re.compile(r"\bQ([1-4])\s*" + FISCAL_YEAR, re.I)
+PERIOD_FY = re.compile(r"\b" + FISCAL_YEAR, re.I)
 
 
 def growth_number(sentence):
@@ -77,6 +79,8 @@ def statement_from(sentence):
     Revenue growth is the metric the verdicts check. Margin and capex guidance are listed with their
     stated figure, but the verdict is 'not checked' for them, because they are not compared with reported figures.
     """
+    if sentence.rstrip().endswith("?"):
+        return None   # an analyst's question, not a statement by management
     if not (PERCENT.search(sentence) or RANGE.search(sentence)):
         return None
     if not FORWARD.search(sentence) or REPORTED.search(sentence) or SEQUENTIAL.search(sentence):
@@ -91,21 +95,30 @@ def statement_from(sentence):
     return None
 
 
-CALL_REFERENCE = re.compile(r"\b(Q[1-4]|H[12])\s*(?:of\s*)?FY\s?(\d{2})\b", re.I)
+CALL_REFERENCE = re.compile(r"\b(Q[1-4]|H[12])\s*(?:of\s*)?" + FISCAL_YEAR, re.I)
 RELATIVE_THIS = re.compile(
     r"\b(?:for the (?:full )?(?:financial )?year|rest of the year|this (?:financial )?year|"
     r"current (?:financial )?year|full[- ]year)\b", re.I)
 RELATIVE_NEXT = re.compile(r"\b(?:coming|next) (?:financial )?year\b", re.I)
 
 
-def call_context(chunks):
-    """{document: (fiscal year, quarter)} for each call: the year and quarter named most often in its text,
-    such as 'H1 of FY27'. A call with no such reference has no entry."""
+def call_references(chunks):
+    """{document: [(fiscal year, quarter), ...]} for every 'Q2 FY27' or 'H1 of FY27' style reference in each call."""
     found = {}
     for chunk in chunks:
         document = chunk.get("document_id") or chunk["label"]
         for match in CALL_REFERENCE.finditer(chunk["text"]):
             found.setdefault(document, []).append((int(match.group(2)), match.group(1).upper()))
+    return found
+
+
+MIN_REFERENCES = 3   # how many references a call needs before 'already happened' is trusted
+
+
+def call_context(chunks):
+    """{document: (fiscal year, quarter)} for each call: the year and quarter named most often in its text,
+    such as 'H1 of FY27'. A call with no such reference has no entry."""
+    found = call_references(chunks)
     context = {}
     for document, references in found.items():
         year = Counter(y for y, _ in references).most_common(1)[0][0]
@@ -130,11 +143,33 @@ def inferred_period(sentence, context):
     return None
 
 
+CALL_QUARTER_NUMBER = {"Q1": 1, "Q2": 2, "Q3": 3, "Q4": 4, "H1": 2, "H2": 4}
+
+
+def is_past(period, context):
+    """True when a statement's period is not after the call it was said on, so it reports a result.
+
+    A quarter is past if it is the call's own quarter or earlier. A year is past if it ended before the call,
+    or is the call's year on a year-end call. With no known call or period, nothing is treated as past.
+    """
+    if not period or context is None:
+        return False
+    call_year, call_quarter = context
+    quarter = re.fullmatch(r"Q([1-4]) FY(\d{2})", period)
+    if quarter:
+        return (int(quarter.group(2)), int(quarter.group(1))) <= (call_year, CALL_QUARTER_NUMBER[call_quarter])
+    year = re.fullmatch(r"FY(\d{2})", period)
+    if year:
+        return int(year.group(1)) < call_year or (int(year.group(1)) == call_year and call_quarter in ("Q4", "H2"))
+    return False
+
+
 def guidance_statements(chunks):
     """Candidate statements from every chunk, in document order. Each one carries its exact quote,
     page and document label. A sentence appears once even if it is stored twice. When a sentence names
     no year, the year is worked out from the call (see inferred_period)."""
     contexts = call_context(chunks)
+    support = {document: len(refs) for document, refs in call_references(chunks).items()}
     seen, found = set(), []
     for chunk in chunks:
         document = chunk.get("document_id") or chunk["label"]
@@ -145,6 +180,8 @@ def guidance_statements(chunks):
                 continue
             if fields["period"] is None:
                 fields["period"] = inferred_period(sentence, contexts.get(document))
+            elif support.get(document, 0) >= MIN_REFERENCES and is_past(fields["period"], contexts.get(document)):
+                continue   # it names a period that has already happened, so it is a result
             key = (" ".join(sentence.lower().split()), chunk["page"])
             if key in seen:
                 continue

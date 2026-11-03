@@ -162,3 +162,39 @@ def test_the_guidance_in_force_is_listed_for_its_fiscal_year():
     guidance = run_narrative("INFY", OCT_CALL, FY27_SO_FAR)["guidance_by_year"]
     assert "operating margin 20.0% to 22.0%" in guidance["FY27"]
     assert "revenue growth 1.0% to 2.0% (constant currency)" in guidance["FY27"]
+
+
+# ---- Sentences from the live check that were wrongly treated as promises (public transcript text).
+def test_reported_results_in_other_words_are_not_guidance():
+    assert statement_from("And lastly, on the overall top line growth guidance, we had suggested for high "
+                          "single-digit growth versus this quarter, we have done almost 11% kind of a growth.") is None
+    assert statement_from("During the 3rd Quarter of FY 2026, we recorded sales of Rs.1,54,691 million, registering "
+                          "a growth of 15.1% vis- a -vis Q3 FY 2025.") is None
+
+
+def test_an_analysts_question_is_not_a_statement_by_management():
+    assert statement_from("How do we think about the margin commitment we had made around exiting FY27, "
+                          "at 25% plus EBIT margin range?") is None
+
+
+def test_a_bare_fiscal_year_does_not_make_a_result_sound_like_a_promise():
+    assert statement_from("Nitin, we are exiting FY26 at a four-year high on annual margins at 25%.") is None
+
+
+def test_fiscal_years_written_in_full_are_understood():
+    from server.guidance import period_label
+    assert period_label("In Q3 FY 2026 we expect margin of 21%.") == "Q3 FY26"
+    assert period_label("For FY2027 we expect growth.") == "FY27"
+
+
+def test_a_statement_about_a_year_that_has_already_ended_is_a_result_not_a_promise():
+    call = ("We reported Q2 FY27 results today. H1 of FY27 went to plan. Q2 FY27 demand was strong. "
+            "We expect operating margin of 21% in FY25. We expect operating margin of 22% in FY28.")
+    found = guidance_statements([{"id": "a", "document_id": "d", "page": 1, "label": "call", "text": call}])
+    assert [c["period"] for c in found] == ["FY28"]
+
+
+def test_a_call_with_too_few_references_is_not_used_to_discard_statements():
+    one_reference = "We expect revenue growth of 12 percent in Q3 FY26."
+    found = guidance_statements([{"id": "a", "document_id": "d", "page": 1, "label": "call", "text": one_reference}])
+    assert len(found) == 1       # a single mention is not enough to know which quarter the call is about
