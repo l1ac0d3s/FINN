@@ -95,6 +95,14 @@ CREATE TABLE IF NOT EXISTS management_bios (
     updated_at    TEXT NOT NULL
 );
 
+-- Plain-English notes on promise verdicts, written on the laptop by a small model.
+CREATE TABLE IF NOT EXISTS claim_notes (
+    id          TEXT PRIMARY KEY,           -- claim id from server/pull.py
+    ticker      TEXT NOT NULL,
+    text        TEXT NOT NULL,
+    updated_at  TEXT NOT NULL
+);
+
 -- Server only: user settings, such as alert thresholds.
 CREATE TABLE IF NOT EXISTS settings (
     key    TEXT PRIMARY KEY,
@@ -132,10 +140,11 @@ PRIMARY_KEY = {
     "chunks": "id",
     "classify_cache": "subject_hash",
     "management_bios": "id",
+    "claim_notes": "id",
 }
 
 SYNCED = ["companies", "prices_eod", "announcements", "alerts", "financials_q", "documents", "chunks",
-          "management_bios"]
+          "management_bios", "claim_notes"]
 
 COLUMNS = {
     "companies": ["ticker", "name", "in_portfolio", "updated_at"],
@@ -146,6 +155,7 @@ COLUMNS = {
     "documents": ["id", "ticker", "doc_type", "period", "url", "label", "updated_at"],
     "chunks": ["id", "document_id", "ticker", "doc_type", "page", "text", "updated_at"],
     "management_bios": ["id", "ticker", "name", "role", "bio", "source_url", "published_at", "updated_at"],
+    "claim_notes": ["id", "ticker", "text", "updated_at"],
 }
 
 

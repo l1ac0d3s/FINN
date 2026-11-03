@@ -8,49 +8,79 @@
 - Repository: https://github.com/l1ac0d3s/FINN
 - AI build history: https://claude.ai/code/session_01A1LVKziQJcCEW5rvXbFFn9
 
+The free hosting plan sleeps when idle. The first visit can take up to a minute.
+
 ## What I built
 
-FINN is a mobile-first investor filter with a push view and a pull view.
+FINN is a mobile-first investor filter. Push tells an investor what changed. Pull answers a question about one company.
 
-**Push**
-- A portfolio of 18 companies across sectors and sizes, plus 4 ad-hoc tickers.
-- A digest for 24 hours, 3 days, 7 days, or any number of hours from 1 to 720.
-- Each announcement is classified using the 18 categories in the reference document, and sorted into High, Medium, Routine and Hidden.
-- Every filing has a one-line meaning for its type, and a market line showing how the stock moved after the filing.
-- Filings listed under several subject lines appear as one card.
-- Price and volume alerts, with thresholds you can change in the app.
-- You choose which announcement types raise an alert.
-- Results cards with revenue, EBITDA, PBT and PAT, and QoQ and YoY growth.
-- You can look up any ticker that has data on the server.
+**Push: the digest (Today)**
+- A portfolio of 18 NSE companies across sectors and sizes, plus 4 ad-hoc tickers. The list is in `ingest/config.py`.
+- A digest for 24 hours, 3 days, 7 days, or any custom period from 1 to 720 hours.
+- Every filing is classified into one of the 18 categories in the reference document and placed in High, Medium, Routine or Hidden. Hidden items are counted, never listed.
+- High-tier filings come first. Routine is collapsed. A filing listed under several subject lines appears as one card.
+- Each card has a one-line meaning for its category, and a market line showing how the stock moved after the filing. A filing made after 15:30 IST is measured from the next session.
+- Management-change cards show the person's name, role and profile, read from the appointment filing itself. If the filing has no profile, the card says so and links the filing.
+- Results cards show revenue, EBITDA, PBT and PAT, with QoQ and YoY change. They also show a profit view: EBITDA growth against PBT growth, the gap between them, and a blended figure whose weight is stated.
 
-**Pull**
-- Narrative vs numbers: management's quantified revenue claims are taken from earnings-call transcripts, and each one must be quoted word for word from the cited page. Claims that fail this check are dropped. Each claim is then compared with reported growth.
+**Push: alerts**
+- Price alerts use each stock's own history. A move alerts when it is an outlier against that stock's last 30 sessions (z score of 2 or more by default), and at least 2% in size. A fixed percentage would treat a utility and a volatile small cap alike.
+- Volume alerts fire when volume is at least 2 times the 20-session median.
+- You set the thresholds in the app, and choose which announcement types raise an alert. Changes apply at once, without a re-run.
+
+**Pull: narrative vs numbers (the worked example)**
+- Forward-looking revenue growth statements are taken directly from the last four earnings-call transcripts. A sentence qualifies only if it states a percentage, is about revenue or growth, looks forward-looking, and is not a reported or sequential figure.
+- Each statement must match the source word for word, on the stated page. Anything that doesn't match is dropped and counted.
+- Each statement is compared with reported figures, in one of two ways. A single quarter is compared with the same quarter a year earlier. A full fiscal year (April to March) is compared with the year before, summed from four quarters each.
+- Each verdict is the share of the promise delivered. The bands are: met at 100% or more, nearly met at 90% or more, partly met at 50% or more, and missed below 50%. A result of 14.95% against a 15% target is 99.7%, which is "nearly met", not a miss.
+- No language model is used at run time. The check is deterministic, so the same transcripts always give the same answer.
+
+**Pull: other outputs**
+- Financial snapshot and four-quarter trajectory, from the stored quarterly figures.
+- A credit scorecard at `/credit.html`. You enter debt, cash and interest expense from the annual report. It scores interest cover, net debt to EBITDA, PAT margin and EBITDA trend, and gives a rating and an underwriting view. A chart shows how the score moves as EBITDA falls or rises, at three debt levels.
 
 ## Key decisions and trade-offs
 
-- The data is gathered on a computer and sent to the hosted app. Financial sites block the cloud host, so this was the reliable route.
-- A nightly job on GitHub Actions refreshes the data each weekday at 18:30 IST, so no computer needs to stay on. Its first run is a test, and I haven't confirmed it yet.
-- Results and market figures come from data, not from a language model.
-- EBITDA is screener.in's "Operating Profit", which is an approximation.
-- Every filing's one-line meaning describes its category, not its content. Reading the actual document would need downloads I haven't built.
-- The page shows "Data as of" with the newest filing date, and the time windows are measured from that date.
+- **Data is gathered on a computer, then published to the hosted app.** Financial sites block cloud hosts from the data sources I could reach. The app keeps working when the laptop is off, because the server holds the last published data.
+- **A nightly job on GitHub Actions** is configured to refresh the data each weekday at 18:30 IST. I have not yet confirmed a scheduled run has passed.
+- **Models are used only on the laptop, for two small jobs.** The hosted app makes no model calls. See the Models section below.
+- **EBITDA is screener.in's operating profit,** an approximation of the figure the brief defines. It is labelled as such in the app. The profit view shows where PBT and operating profit diverge, because profit can move for reasons other than operations, such as other income.
+- **Growth is divided by the size of the base,** so a move from a loss to a profit is read as an improvement. A plain percentage gives the opposite sign in that case.
+- **Credit thresholds and promise bands are my assumptions,** not an industry or bank standard. They are shown in the app and in the code.
+- **The filing's meaning line describes the category,** not the document's content. Reading the document itself would need the full PDF text, which I did not build.
+
+## Models: what runs where, and why
+
+| Step | Model | Where it runs | Why |
+|---|---|---|---|
+| Label announcement subjects that no rule matches | Claude Haiku (`claude-haiku-5-5`) | Laptop, nightly, cached by subject | One short label per subject is a cheap, bulk task |
+| One-sentence note on each promise verdict | Claude Haiku (`claude-haiku-5-5`) | Laptop, nightly, cached by claim | Plain English for an analyst. A note is kept only if every number in it appears in the inputs |
+| Finding and checking management's promises | None (code) | Laptop and server | Small local models could not follow the output format (see below). Rules with word-for-word checks give the same answer each time |
+| Growth, verdicts, alerts, credit score | None (code) | Server | Arithmetic is not a model's job. Each threshold is written in `server/risk.py` |
+
+**What I tried first.** I ran Qwen 2.5 models locally through Ollama, at 1.5B, 3B and 7B parameters, to extract the promises from transcripts. The 1.5B and 3B models returned prose or tags instead of the requested list, and copied whole paragraphs as "quotes" without page numbers, so the word-for-word check dropped everything. The 7B model took too long on my laptop. I replaced the extraction with rules and kept the word-for-word check. Those experiments are in the build history.
+
+**Status of the note step.** The note step is tested with a stand-in model client. It runs against the live model only once an Anthropic key is set on the laptop and `python -m ingest.notes --check` returns `OK`. Until then the app shows no notes. The label step has the same requirement.
 
 ## What is not finished
 
-- **The claims check has not produced output from a real model.** It needs a language model. The free hosted models I tried had no credits or refused access, and a local model on my laptop was too slow to finish. The code is complete and tested with a stand-in model.
-- **Only one pull output is built.** Guidance, cash quality, balance sheet, business snapshot, trajectory and bull vs bear are not built.
-- **Management-change bio.** I found no reliable source for a person's background, so it is not built.
-- **Results figures come from screener.in,** not from the results filing the brief names.
-- **Alerts are not sent to the phone when the app is closed.** The app shows notifications while it is open, and it can be added to a phone's home screen.
+- **Results figures come from screener.in,** not from the results filing the brief names. The results card says so.
+- **Management-change background from outside the filing.** The app uses only the appointment filing. I did not add a web search, and I did not scrape LinkedIn, because it prohibits scraping. Where a filing has no profile, the card says that.
+- **Business snapshot, balance sheet, cash quality and bull vs bear** are not built. Only the outputs listed above exist.
+- **Guidance** is the list of forward-looking revenue growth statements from transcripts. It does not cover margins, capex or annual reports.
+- **Any NSE ticker.** The engine works on any ticker whose data has been ingested. A ticker that hasn't been ingested cannot be researched on demand yet.
+- **Notifications** appear only while the app is open. Alerts are not pushed to the phone when it is closed.
 - **BSE is not used.** NSE covers every demo company.
+- **The NSE classification has been tested on labelled test subjects,** not on every live subject line. Subjects no rule matches are shown as low-tier press releases, so they stay visible under Routine.
+- **One company, PAGEIND, did not return quarterly figures** from screener.in in the last run I checked. Its results card shows no figures.
 
 ## Where I'd take it next
 
-1. Get the claims check running on a hosted model, and run it across all 22 companies.
-2. Build the other pull outputs, starting with guidance and cash quality from screener.in's tables.
-3. Read the results figures from the filing itself.
-4. Add a source for management-change backgrounds, for example the disclosure in the appointment filing.
-5. Send push notifications when the app is closed.
+1. Read results figures from the results filing itself, and reconcile them with screener.in.
+2. Add a source for management-change backgrounds beyond the appointment filing, using a licensed data source.
+3. Add guidance on margins and capex, and cash quality from the cash flow statement.
+4. Send push notifications when the app is closed.
+5. Let an investor research any NSE ticker on demand, by ingesting it when first asked.
 
 Thank you for the opportunity. I'm happy to walk through any part of it.
 

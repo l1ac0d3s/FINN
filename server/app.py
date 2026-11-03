@@ -18,7 +18,7 @@ from fastapi.staticfiles import StaticFiles
 
 from server.alerts import ALL_CATEGORIES, DEFAULTS, alert_categories, compute_alerts, thresholds, valid_thresholds
 from server.digest import build_digest
-from server.pull import run_narrative
+from server.pull import run_narrative, with_notes
 from server.results import build_results_card
 from server.risk import credit_model, sensitivity, ttm_from_quarters
 from server.snapshot import financial_snapshot, trajectory
@@ -130,6 +130,12 @@ def company_results(ticker: str):
     return card
 
 
+def claim_notes_for(conn, ticker):
+    """Stored plain-English notes for a company's promise verdicts, keyed by claim id."""
+    return {r["id"]: r["text"] for r in conn.execute(
+        "SELECT id, text FROM claim_notes WHERE ticker = ?", (ticker,)).fetchall()}
+
+
 def quarter_rows(conn, ticker):
     return [dict(r) for r in conn.execute(
         "SELECT period, period_end, revenue, ebitda, pbt, pat, source FROM financials_q "
@@ -153,10 +159,10 @@ def pull_narrative(ticker: str):
             raise HTTPException(status_code=404, detail=f"no transcripts stored for {ticker}")
         quarters = quarter_rows(conn, ticker)
 
-        key = hashlib.sha1("|".join(["v2", ticker] + sorted(c["id"] for c in chunks)).encode()).hexdigest()
+        key = hashlib.sha1("|".join(["v3", ticker] + sorted(c["id"] for c in chunks)).encode()).hexdigest()
         cached = conn.execute("SELECT output_json FROM pull_cache WHERE key = ?", (key,)).fetchone()
         if cached:
-            return {**json.loads(cached["output_json"]), "cached": True}
+            return {**with_notes(json.loads(cached["output_json"]), claim_notes_for(conn, ticker)), "cached": True}
 
         result = run_narrative(ticker, chunks, quarters)
 
@@ -165,7 +171,7 @@ def pull_narrative(ticker: str):
             (key, json.dumps(result), datetime.now(timezone.utc).isoformat(timespec="seconds")),
         )
         conn.commit()
-        return {**result, "cached": False}
+        return {**with_notes(result, claim_notes_for(conn, ticker)), "cached": False}
     finally:
         conn.close()
 

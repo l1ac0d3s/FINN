@@ -210,6 +210,15 @@ def run(do_publish, skip_text=False):
             summary.append(f"{ticker}: {read} management-change filings read")
         except Exception as exc:
             summary.append(f"{ticker}: management filings failed ({exc})")
+        try:
+            from ingest.notes import store_claim_notes
+            notes = store_claim_notes(conn, ticker, client)
+            if notes is None:
+                summary.append(f"{ticker}: promise notes skipped (no ANTHROPIC_API_KEY set)")
+            else:
+                summary.append(f"{ticker}: {notes[0]} promise notes written, {notes[1]} rejected")
+        except Exception as exc:
+            summary.append(f"{ticker}: promise notes failed ({exc})")
         conn.commit()
 
     print("\n".join(summary))

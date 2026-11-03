@@ -1,14 +1,11 @@
-"""Narrative-vs-numbers logic. The model is replaced by a fixed reply, so these
-tests check everything around the model: grounding, period mapping, verdicts."""
+"""Narrative-vs-numbers logic: grounding, period mapping, verdicts, and the notes attached to them."""
 
 import importlib
-import json
 from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from server.llm import parse_json_list
-from server.pull import ground, pick_passages, quarter_end, run_narrative, verdict_for
+from server.pull import claim_id, ground, quarter_end, run_narrative, verdict_for, with_notes
 
 PASSAGE = {
     "label": "Transcript Q2 FY26",
@@ -31,12 +28,6 @@ def test_indian_quarter_labels_map_to_calendar_quarter_ends():
     assert quarter_end("Q4 FY26") == "2026-03-31"
     assert quarter_end("Dec 2025") == "2025-12-31"
     assert quarter_end("FY27") is None
-
-
-def test_model_reply_wrapped_in_prose_is_still_parsed():
-    reply = 'Here are the claims:\n[{"quote": "x", "page": 1}]\nDone.'
-    assert parse_json_list(reply) == [{"quote": "x", "page": 1}]
-    assert parse_json_list("no json here") == []
 
 
 def test_grounded_quote_is_kept_with_its_source():
@@ -67,48 +58,46 @@ def test_non_numeric_page_is_dropped_not_crashed():
 
 def test_met_missed_and_pending_verdicts():
     met = verdict_for({"metric": "revenue", "growth_pct": 10, "period": "Sep 2025"}, QUARTERS)
-    missed = verdict_for({"metric": "revenue", "growth_pct": 40, "period": "Sep 2025"}, QUARTERS)
+    partly = verdict_for({"metric": "revenue", "growth_pct": 40, "period": "Sep 2025"}, QUARTERS)
     pending = verdict_for({"metric": "revenue", "growth_pct": 10, "period": "Mar 2026 Q4 FY26"}, QUARTERS)
-    assert met == (32.0, "met")          # 1320 vs 1000 a year earlier = +32%
-    assert missed == (32.0, "partly met")   # 32 delivered of 40 promised = 80%
-    assert pending == (None, "pending")  # no figures for that quarter yet
+    assert met == (32.0, "met")                 # 1320 vs 1000 a year earlier = +32%
+    assert partly == (32.0, "partly met")       # 32 delivered of 40 promised = 80%
+    assert pending == (None, "pending")         # no figures for that quarter yet
 
 
 def test_non_revenue_claims_are_not_checked():
     assert verdict_for({"metric": "margin", "growth_pct": 20, "period": "Q3 FY26"}, QUARTERS) == (None, "not checked")
 
 
-def test_pick_passages_prefers_guidance_language():
-    chunks = [
-        {"id": "a", "page": 1, "text": "The weather was mild and the room was warm.", "label": "x"},
-        {"id": "b", "page": 2, "text": "We expect margin guidance for FY27 to improve.", "label": "x"},
-    ]
-    assert [c["id"] for c in pick_passages(chunks)] == ["b"]
-
-
-def test_run_narrative_end_to_end_with_stand_in_model():
+def test_run_narrative_finds_statements_and_grades_them_without_a_model():
     chunks = [{"id": "c1", "page": 4, "text": PASSAGE["text"], "label": PASSAGE["label"]}]
-    reply = json.dumps([
-        {"quote": "We expect revenue growth of 12 percent in Q3 FY26.", "page": 4,
-         "metric": "revenue", "growth_pct": 12, "period": "Dec 2025"},
-        {"quote": "A quote the source never said.", "page": 4, "metric": "revenue",
-         "growth_pct": 50, "period": "Dec 2025"},
-    ])
-    result = run_narrative("INFY", chunks, QUARTERS, llm=lambda system, user: reply)
-    assert result["dropped"] == 1
-    assert len(result["claims"]) == 1
+    result = run_narrative("INFY", chunks, QUARTERS)
+    assert result["dropped"] == 0
     claim = result["claims"][0]
-    assert claim["verdict"] == "partly met"      # Dec 2025 is +9.1% against 12% promised = 76% of target
+    assert claim["verdict"] == "partly met"      # Dec 2025 is +9.1%, 12% promised = 76% of target
     assert claim["actual_yoy_pct"] == pytest.approx(9.1)
+    assert claim["id"]                           # every claim carries its id for the note
     assert [q["period"] for q in result["quarters"]] == ["Mar 2025", "Jun 2025", "Sep 2025", "Dec 2025"]
 
 
-def test_no_guidance_text_returns_a_note_without_calling_the_model():
-    called = []
-    result = run_narrative("INFY", [{"id": "c", "page": 1, "text": "Nothing relevant.", "label": "x"}],
-                           QUARTERS, llm=lambda s, u: called.append(u) or "[]")
-    assert called == []
+def test_no_statements_returns_a_note():
+    result = run_narrative("INFY", [{"id": "c", "page": 1, "text": "Nothing relevant.", "label": "x"}], QUARTERS)
+    assert result["claims"] == []
     assert "no forward-looking" in result["note"]
+
+
+def test_claim_id_is_stable_and_changes_with_the_verdict():
+    base = {"quote": "We expect revenue growth of 12 percent in Q3 FY26.", "page": 4,
+            "verdict": "partly met", "promised_growth_pct": 12.0, "actual_yoy_pct": 9.1}
+    assert claim_id("INFY", base) == claim_id("INFY", dict(base))
+    assert claim_id("INFY", base) != claim_id("INFY", {**base, "verdict": "met"})
+
+
+def test_with_notes_attaches_text_by_id_and_leaves_others_empty():
+    result = {"claims": [{"id": "a"}, {"id": "b"}]}
+    out = with_notes(result, {"a": "The company delivered most of its promise."})
+    assert out["claims"][0]["explanation"] == "The company delivered most of its promise."
+    assert out["claims"][1]["explanation"] is None
 
 
 @pytest.fixture
@@ -116,7 +105,6 @@ def client(tmp_path, monkeypatch):
     fastapi_testclient = pytest.importorskip("fastapi.testclient")
     monkeypatch.setenv("FINN_SERVER_DB", str(tmp_path / "server.db"))
     monkeypatch.setenv("FINN_SYNC_TOKEN", "test-token")
-    monkeypatch.delenv("HF_TOKEN", raising=False)
     import server.app as app_module
     importlib.reload(app_module)
     return fastapi_testclient.TestClient(app_module.app)
@@ -139,3 +127,4 @@ def test_endpoint_finds_statements_without_any_model_key(client):
     claims = resp.json()["claims"]
     assert claims[0]["quote"] == "We expect revenue growth of 12 percent in Q3 FY26."
     assert claims[0]["page"] == 4
+    assert "explanation" in claims[0]

@@ -1,44 +1,30 @@
 """Narrative vs numbers: check management's forward-looking revenue growth statements against reported growth.
 
 Steps:
-1. Find forward-looking revenue growth sentences in the transcripts (server/guidance.py, no model needed).
-   A language model can add more, but only through the same checks.
+1. Find forward-looking revenue growth sentences in the transcripts (server/guidance.py).
+   No language model is used here, so the same transcripts always give the same answer.
 2. Keep only statements whose quote appears word for word on the stated page of the source.
    A growth figure is kept only if it appears in the quote, and never for sequential figures.
 3. Compare each statement with reported growth: a quarter with its year-ago quarter, or a full
    fiscal year (April to March) with the year before, summed from four quarters each.
 
 Statements that fail step 2 are dropped and counted, never shown. Verdicts come from the figures.
+Plain-English notes on each verdict are written on the laptop (ingest/notes.py) and attached here.
 """
 
+import hashlib
 import re
 from calendar import monthrange
 
 from server.guidance import SEQUENTIAL, guidance_statements
-from server.risk import achievement_pct, grade
-from server.llm import parse_claims
 from server.results import growth_pct, year_ago
+from server.risk import achievement_pct, grade
 
-GUIDANCE_WORDS = re.compile(
-    r"guidance|expect|outlook|anticipat|target|aim|we see|grow|margin|capex|capital expenditure|"
-    r"FY\s?\d{2}|Q[1-4]", re.I,
-)
 PERIOD = re.compile(r"\bQ([1-4])\s*FY\s?(\d{2})\b", re.I)
 FY_PERIOD = re.compile(r"^\s*FY\s?(\d{2})\s*$", re.I)
 MONTH_PERIOD = re.compile(r"\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(\d{4})\b", re.I)
 MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-MAX_PASSAGES = 6            # limits the model's input when the optional model path is used
-
-SYSTEM_PROMPT = (
-    "You extract management's quantified statements from earnings-call transcript passages. "
-    "Use only the passages you are given. Reply with a JSON list and nothing else. "
-    "Each item must have: quote (one sentence copied exactly, word for word, from a passage), "
-    "page (the page number in that passage's header), metric (one of revenue, ebitda, pat, "
-    "margin, capex, other), growth_pct (the growth percentage stated, as a plain number, or null), "
-    "period (for example 'Q3 FY26' or 'FY27', or null). "
-    "Include only statements about current or future performance that state a number. "
-    "If there are none, reply with []."
-)
+GRADED = ("met", "nearly met", "partly met", "missed")   # verdicts that have numbers behind them
 
 
 def normalise(text):
@@ -61,26 +47,6 @@ def quarter_end(label):
     return None
 
 
-def pick_passages(chunks, limit=MAX_PASSAGES):
-    """Chunks with the most guidance-type words, most relevant first."""
-    scored = [(len(GUIDANCE_WORDS.findall(c["text"])), c) for c in chunks]
-    scored = [item for item in scored if item[0] > 0]
-    scored.sort(key=lambda item: -item[0])
-    return [c for _, c in scored[:limit]]
-
-
-def build_prompt(passages):
-    lines = [f"[{p['label']} | page {p['page']}] {p['text']}" for p in passages]
-    return "Passages:\n" + "\n".join(lines)
-
-
-def number(value):
-    try:
-        return float(str(value).replace("%", "").strip())
-    except (TypeError, ValueError):
-        return None
-
-
 def number_in_quote(value, quote):
     return any(abs(float(token) - value) < 1e-9 for token in re.findall(r"\d+(?:\.\d+)?", quote))
 
@@ -95,8 +61,7 @@ def growth_from_quote(quote):
 
 
 def ground(claims, passages):
-    """Keep claims whose quote appears verbatim on the stated page. Returns (kept, dropped count).
-    A growth figure is kept only if it appears in the quote; otherwise the claim is shown as not checked."""
+    """Keep claims whose quote appears verbatim on the stated page. Returns (kept, dropped count)."""
     kept, dropped = [], 0
     for claim in claims:
         raw = str(claim.get("quote", ""))
@@ -112,7 +77,7 @@ def ground(claims, passages):
         if source is None:
             dropped += 1
             continue
-        growth = None if SEQUENTIAL.search(raw) else number(claim.get("growth_pct"))
+        growth = None if SEQUENTIAL.search(raw) else claim.get("growth_pct")
         if growth is not None and not number_in_quote(growth, raw):
             growth = None
         if growth is None:
@@ -181,16 +146,22 @@ def quarter_table(quarters, count=4):
     return rows
 
 
-def run_narrative(ticker, chunks, quarters, llm=None):
-    """The narrative-vs-numbers output for one company.
+def claim_id(ticker, claim):
+    """A stable id for a verdict. The same statement with the same verdict always gets the same id,
+    so a note written once is reused, and a changed verdict gets a fresh note."""
+    parts = [ticker, normalise(claim["quote"]), str(claim["page"]), str(claim["verdict"]),
+             str(claim["promised_growth_pct"]), str(claim["actual_yoy_pct"])]
+    return hashlib.sha1("|".join(parts).encode()).hexdigest()
 
-    Statements come from the transcripts directly. If `llm(system, user)` is given, its claims are
-    added after the same word-for-word check, and duplicates are merged.
-    """
+
+def with_notes(result, notes):
+    """Attach the stored plain-English note to each claim. `notes` maps claim id to text."""
+    return {**result, "claims": [{**c, "explanation": notes.get(c.get("id"))} for c in result["claims"]]}
+
+
+def run_narrative(ticker, chunks, quarters):
+    """The narrative-vs-numbers output for one company, from the stored transcripts and quarterly figures."""
     found = guidance_statements(chunks)
-    passages = pick_passages(chunks)
-    if llm is not None and passages:
-        found = found + parse_claims(llm(SYSTEM_PROMPT, build_prompt(passages)))
     if not found:
         return {"ticker": ticker, "claims": [], "dropped": 0, "quarters": quarter_table(quarters),
                 "note": "no forward-looking revenue growth statement with a number was found in the stored transcripts"}
@@ -203,7 +174,7 @@ def run_narrative(ticker, chunks, quarters, llm=None):
             continue
         seen.add(key)
         actual, verdict = verdict_for(claim, quarters)
-        claims.append({
+        row = {
             "quote": claim["quote"],
             "doc": claim["doc"],
             "page": claim["page"],
@@ -212,5 +183,6 @@ def run_narrative(ticker, chunks, quarters, llm=None):
             "promised_growth_pct": claim.get("growth_pct"),
             "actual_yoy_pct": actual,
             "verdict": verdict,
-        })
+        }
+        claims.append({**row, "id": claim_id(ticker, row)})
     return {"ticker": ticker, "claims": claims, "dropped": dropped, "quarters": quarter_table(quarters)}

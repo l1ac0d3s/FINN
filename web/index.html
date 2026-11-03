@@ -293,6 +293,7 @@ function claimsHTML(result) {
     <p>“${esc(c.quote)}”</p>
     <p class="note">${esc(c.doc)} · page ${esc(c.page)} · promised ${esc(fmtPct(c.promised_growth_pct))}
       for ${esc(c.period || "an unstated period")} · reported YoY ${esc(fmtPct(c.actual_yoy_pct))}</p>
+    ${c.explanation ? `<p class="note">${esc(c.explanation)}</p>` : ""}
   </li>`).join("");
   return `${table}${tally}<ul class="claims">${items}</ul>${note}`;
 }

@@ -1,119 +1,123 @@
 # FINN
 
-A mobile-first investor filter. Push shows what changed in your portfolio and why it
-matters. Pull answers questions about one company, using only its annual reports and
-concall transcripts.
+A mobile-first investor filter. **Push** shows what changed in a portfolio and why it matters.
+**Pull** checks what management promised in earnings calls against the reported figures.
 
-**Live:** https://finn-wq09.onrender.com  
-**Repository:** https://github.com/l1ac0d3s/FINN
+Live app: https://finn-wq09.onrender.com
+The covering note, with what is and isn't built, is in `COVERING_NOTE.md`.
 
 ## Layout
 
 ```
-ingest/    runs on your laptop: prices, announcements, classification, alerts, publish
-server/    runs on Render: receives synced rows, serves the digest and alerts
-shared/    schema used by both sides
-web/       mobile-first web app (single-page, dark/light themes, installable)
-tests/     pytest (98 tests)
-seed/      seed.sqlite — committed snapshot so the hosted app is never blank
+ingest/     runs on the laptop: prices, announcements, screener figures, transcripts, publish
+server/     runs on Render: receives synced rows, serves the digest, alerts, pull outputs, credit
+  risk.py       growth with a negative base, promise grading, z-scores, profit view, credit scorecard
+  guidance.py   forward-looking revenue growth statements from transcripts (no language model)
+  pull.py       narrative vs numbers: word-for-word check, quarter and fiscal-year verdicts
+  alerts.py     price alerts (z-score per stock) and volume alerts
+shared/     schema used by both sides
+web/        index.html (Today, lookup, settings) and credit.html (credit scorecard)
+tests/      pytest, no network needed
+seed/       recent data, so the hosted app is never blank on an empty disk
 ```
 
 ## Setup (laptop)
 
 ```powershell
-# Windows
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-copy .env.example .env   # fill in values
-pytest                    # 98 pure-logic tests, no network needed
+python -m pytest -q
 ```
 
-```bash
-# macOS / Linux
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env   # fill in values, then: export $(grep -v '^#' .env | xargs)
-pytest
-```
+Set the portfolio, the ad-hoc tickers and the default thresholds in `ingest/config.py`.
 
-Edit `ingest/config.py` to set the portfolio, ad-hoc tickers, and alert thresholds.
+## Run the daily ingest
 
-## Run
-
-```bash
+```powershell
 python -m ingest.run_daily --dry        # list the tickers
-python -m ingest.run_daily              # ingest into data/ingest.db
-python -m ingest.run_daily --publish    # ingest and sync to the server
+python -m ingest.run_daily              # fetch prices, filings, figures, transcripts and management filings
+python -m ingest.run_daily --publish    # the same, then sync to the server
 ```
 
-Run from the repo root. Schedule the ingest daily after 18:00 IST.
+Run from the repository root, after 18:00 IST, so that the day's closing prices are available.
 
-## Server
+## Plain-English notes (optional, needs an Anthropic key on the laptop)
 
-```bash
-FINN_SYNC_TOKEN=... uvicorn server.app:app --reload
-curl localhost:8000/api/health
+Each promise verdict gets a one-sentence note, written by Claude Haiku on the laptop during the daily run.
+A note is kept only if every number in it appears in the inputs. To check that the key and model work:
+
+```powershell
+$env:ANTHROPIC_API_KEY = "your key, typed here, never committed"
+python -m ingest.notes --check
 ```
 
-Render: start command `uvicorn server.app:app --host 0.0.0.0 --port $PORT`,
-environment variables `FINN_SYNC_TOKEN` and `FINN_SERVER_DB`.
+Without a key the daily run skips the notes, and the app shows none. The hosted app makes no model calls.
+
+## Publish to the hosted app
+
+`refresh_finn.ps1` rebuilds the seed file and sends all the data to the server. It asks for the sync token,
+which must match the `FINN_SYNC_TOKEN` set on Render.
+
+```powershell
+.\refresh_finn.ps1
+```
+
+## Deploy (Render)
+
+1. Create a Render web service from this repository. `render.yaml` sets the Python version, build command and start command.
+2. Set these environment variables on Render: `FINN_SYNC_TOKEN` (a long random string) and `FINN_SERVER_DB` (`data/server.db`).
+3. After any change to the server code, use **Manual Deploy → Deploy latest commit**.
+
+Render's free plan wipes the disk on a redeploy. The seed file fills an empty disk, so the app is never blank, but
+the latest figures come only from the last publish.
+
+## Nightly refresh (GitHub Actions)
+
+`.github/workflows/nightly.yml` runs the daily ingest on weekdays at 18:30 IST, rebuilds the seed and commits it.
+The repository's Actions settings must allow **Read and write** workflow permissions. Run it once by hand to check.
+
+## Alert settings and the credit page
+
+- **Alerts** are set in the app under *Alert settings*. Price alerts use a z score against each stock's last 30 sessions
+  (default 2), with a smallest move of 2%. Volume alerts use 2 times the 20-session median. The server applies changes at once.
+- **Credit scorecard** (`/credit.html`) takes debt, cash and interest expense, in Rs crore, from the annual report.
+  Those three figures are not in the stored data.
 
 ## Status
 
 | Piece | State |
 |---|---|
-| Schema, sync, digest API | Built, tested offline and over HTTP |
-| Classifier (18 categories) | Built, tested on 31 labelled subjects; live NSE subjects not yet checked |
-| Price ingest and alerts (volume, price move) | Built and run live: 22/22 tickers return bars |
-| NSE announcements (last 7 days) | Built and run live: field names confirmed |
-| Screener quarterly financials | Built and run live: 13 quarters for 21 of 22 tickers; PAGEIND still failing |
-| Screener document links | Built and run live: links stored; PDFs not downloaded |
-| Results card (QoQ, YoY) | Built and tested; endpoint `/api/company/{ticker}/results` |
-| Web app (digest, alerts, results cards) | Built: one page at `web/index.html`, served at `/` |
+| Digest, tiers, Routine collapse, windows | Built, tested offline and over HTTP |
+| Announcement classification (18 categories) | Built, tested on labelled subject lines. Unmatched subjects show as low-tier press releases |
+| Market line after each filing | Built |
+| Price alerts (z score) and volume alerts | Built, tested |
+| Results card (QoQ, YoY) and profit view | Built, from screener.in figures. Not yet read from the filing PDF |
+| Management-change profile | Built from the appointment filing, where the filing has a profile |
+| Narrative vs numbers (four quarters) | Built. Deterministic, word-for-word checked, quarter and fiscal-year verdicts |
+| Guidance list | Built, from transcripts only |
+| Financial snapshot and trajectory | Built, from stored quarterly figures |
+| Credit scorecard | Built. Debt, cash and interest are entered by the user |
+| Lookup of an ingested ticker | Built |
 
-## Not built (in order of priority)
+## Not built
 
-1. **Pull outputs beyond narrative vs numbers.** Guidance, cash quality, balance sheet, business snapshot, trajectory and bull vs bear.
-2. **Management-change bio** for the push card — needs a reliable professional-data source.
-3. **BSE fallback** for announcements.
-4. **Background push notifications** when the app is closed. Notifications work while the app is open.
-5. **PAGEIND quarters table** — screener layout not yet recognised for this ticker.
-
-## Deploy (Render)
-
-1. Create a Render web service from this repository. `render.yaml` sets the build and start commands.
-2. In the Render dashboard, set the secrets `FINN_SYNC_TOKEN` (any long random string) and `HF_TOKEN` (your Hugging Face token).
-3. Once the service is live, publish from your machine:
-
-```powershell
-$env:FINN_SYNC_TOKEN = "the same value as on Render"
-$env:FINN_SERVER_URL = "https://your-service.onrender.com"
-python -m ingest.run_daily --publish
-```
-
-Render's free tier may not keep the server's database across restarts. If the digest is empty after a restart, publish again.
+- Results figures from the results filing PDF (screener.in is the source).
+- Management backgrounds beyond the appointment filing. No web search, no LinkedIn scraping.
+- Business snapshot, balance sheet, cash quality, bull vs bear.
+- BSE fallback.
+- Push notifications when the app is closed.
+- On-demand research for a ticker that has not been ingested.
 
 ## Design
 
-The interface is built for an investment team's daily routine, with ENAM Holdings as the intended user:
+- **Today's brief** counts the items needing attention, the alerts and the routine items in one line.
+- **Priority first:** High-tier filings come first, Medium next, and Routine is collapsed. Hidden items are counted, never silent.
+- **Every filing links to its primary source,** and the market line shows the move after each filing.
+- **Nothing is invented in the app.** Figures come from exchange filings, screener.in, end-of-day prices and the transcripts. Each one is shown with its source, and approximations are labelled.
 
-- **Today's brief** gives the count of items needing attention, alerts and routine items in one line, so an investor sees what matters before scrolling.
-- **Priority first:** High-tier filings come first, Medium next, and Routine is collapsed. Nothing is hidden silently, because the number of hidden items is always shown.
-- **Every filing links to its primary source,** and the market line shows how the stock moved after each filing.
-- **Dark and light themes** follow the phone's setting, and the layout is designed for a phone-sized screen.
-- **Nothing is invented.** Figures come from exchange filings, screener.in and end-of-day prices, and each figure is shown with its source.
+## Notifications and install
 
-## Alerts, settings and notifications
-
-- **Alert settings** are changed in the app (open *Alert settings*). They are stored on the server and applied at once. The server recalculates alerts from the synced prices, so no re-publish is needed.
-- **Custom period:** type any number of hours (1 to 720) next to the 24h / 3 days / 7 days buttons.
-- **Notifications:** press *Turn on notifications*. While the app is open, new high-priority filings trigger a notification. The list of seen filings is kept in this browser only.
-- **Install on a phone:** open the app in the phone's browser, then use *Add to Home Screen*. It opens full-screen like an app.
-
-## Always on
-
-The hosted app is designed to run without anyone maintaining it:
-
-- **Seed data.** `seed/seed.sqlite` is a copy of the recent data. When the hosted app starts on an empty disk, it copies this file, so it is never blank. Rebuild it with `python -m ingest.make_seed` and commit it to refresh the data.
-- **No sleep.** A free uptime monitor (for example UptimeRobot) checks `/api/health` every 5 minutes, which keeps the free hosting plan awake. This is a one-time setup.
+- Notifications: press *Turn on notifications*. While the app is open, new high-priority filings trigger one. The seen list is kept in this browser only.
+- On a phone, open the app in the browser and choose *Add to Home Screen*.
+- A free uptime monitor (for example UptimeRobot) pinging `/api/health` every 5 minutes keeps the free plan awake.
