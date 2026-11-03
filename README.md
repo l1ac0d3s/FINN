@@ -101,18 +101,19 @@ The repository's Actions settings must allow **Read and write** workflow permiss
 | Credit scorecard | Built. Debt, cash and interest are entered by the user |
 | Lookup of an ingested ticker | Built |
 | Lookup of a ticker with no data | Built: queued on the server; the laptop ingests it on its next daily run |
+| Bull and bear points | Built as a keyword selection of quoted transcript sentences, with pages. Not a written argument |
 | Guidance (revenue, margin, capex) | Built from transcripts. Revenue is checked against reported figures; margin and capex are listed only |
 
 ## Not built
 
 - Results figures from the results PDFs (one parser per layout). Results come from screener.in.
 - Free cash flow and working-capital days (need capex, receivables and inventory from the full statements).
-- Business snapshot and bull vs bear.
+- Business snapshot.
 - Checking margin and capex guidance against reported figures (they are listed, not checked).
 - Push notifications when the app is closed.
 - BSE data. NSE covers every demo company.
 - Management backgrounds beyond the appointment filing. No web search, no LinkedIn scraping.
-- Business snapshot, balance sheet, cash quality, bull vs bear.
+- Bull vs bear as a written argument. The built version selects quoted transcript sentences by keyword; it does not weigh them.
 - BSE fallback.
 - Push notifications when the app is closed.
 - On-demand research for a ticker that has not been ingested.

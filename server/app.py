@@ -317,6 +317,25 @@ def clear_requests(body: dict = Body(...), authorization: str | None = Header(de
     return {"ok": True, "cleared": len(tickers)}
 
 
+@app.get("/api/company/{ticker}/bullbear")
+def company_bull_bear(ticker: str):
+    """Bull and bear points from the stored transcripts, each quoted with its page."""
+    from server.bullbear import bull_and_bear
+    conn = db()
+    try:
+        chunks = [dict(r) for r in conn.execute(
+            "SELECT c.id, c.page, c.text, d.label FROM chunks c "
+            "JOIN documents d ON d.id = c.document_id "
+            "WHERE c.ticker = ? AND c.doc_type = 'transcript'",
+            (ticker.upper(),),
+        ).fetchall()]
+    finally:
+        conn.close()
+    if not chunks:
+        raise HTTPException(status_code=404, detail=f"no transcripts stored for {ticker}")
+    return {"ticker": ticker.upper(), **bull_and_bear(chunks)}
+
+
 @app.get("/api/company/{ticker}/annual")
 def company_annual(ticker: str):
     """Yearly net worth, borrowings, debt to equity, operating cash flow and cash quality."""

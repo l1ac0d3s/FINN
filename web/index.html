@@ -439,6 +439,18 @@ $("#lookup-form").addEventListener("submit", async (event) => {
     } catch (err) {
       out.insertAdjacentHTML("beforeend", `<p class="note">No balance sheet figures from screener.in for ${esc(ticker)} yet.</p>`);
     }
+    try {
+      const bb = await getJSON(`/api/company/${encodeURIComponent(ticker)}/bullbear`);
+      const list = (points) => points.length
+        ? points.map((p) => `<li>“${esc(p.quote)}”<span class="note"> · ${esc(p.doc)} · page ${esc(p.page)}</span></li>`).join("")
+        : `<li class="note">None found in the transcripts.</li>`;
+      out.insertAdjacentHTML("beforeend", `<div class="card"><div class="meta"><span class="ticker">${esc(ticker)} bull and bear</span></div>
+        <p><strong>Bull</strong></p><ul class="claims">${list(bb.bull)}</ul>
+        <p><strong>Bear</strong></p><ul class="claims">${list(bb.bear)}</ul>
+        <p class="note">${esc(bb.method)}</p></div>`);
+    } catch (err) {
+      // No transcripts stored for this company; nothing to show.
+    }
     out.insertAdjacentHTML("beforeend", `<div class="slot"><button class="action" data-claims="${esc(ticker)}">Check promises against results</button><div class="claims-out"></div></div>`);
   } catch (err) {
     const resp = await fetch(`/api/request/${encodeURIComponent(ticker)}`, { method: "POST" }).catch(() => null);
